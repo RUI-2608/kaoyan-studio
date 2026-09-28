@@ -38,6 +38,10 @@ const expr = `(async () => {
 })()`;
 const r = await page.send('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true });
 console.log(r.result.value || JSON.stringify(r));
+const shot = await page.send('Page.captureScreenshot', { format: 'png' });
+fs.mkdirSync(path.join(ROOT, '.shots'), { recursive: true });
+fs.writeFileSync(path.join(ROOT, '.shots', 'marks-seeded.png'), Buffer.from(shot.data, 'base64'));
+console.log('截图 → .shots/marks-seeded.png');
 try { await page.send('Browser.close'); } catch (e) { }
 browser.kill();
 setTimeout(() => { try { fs.rmSync(profile, { recursive: true, force: true }); } catch (e) { } }, 500);
