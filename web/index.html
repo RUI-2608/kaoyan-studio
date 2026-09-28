@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0d1226">
+<title>考研备考台 · 计算机</title>
+<link rel="stylesheet" href="vendor/katex/katex.min.css">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<div id="frame">
+  <header id="top">
+    <div class="plate">
+      <span class="plate-title">考研备考台</span>
+      <span class="plate-sub">计算机 · 数学 · 英语</span>
+    </div>
+    <div class="top-tools">
+      <button class="tbtn" id="btn-font" title="字号">字号</button>
+      <button class="tbtn" id="btn-mode" title="夜读/暖白">夜读</button>
+      <button class="tbtn" id="btn-data" title="进度备份">进度备份</button>
+      <span class="stamp" id="built-at"></span>
+    </div>
+  </header>
+
+  <nav id="rail" aria-label="主导航">
+    <a href="#/" data-tab="home"><i>◈</i><b>总览</b></a>
+    <a href="#/math" data-tab="math"><i>∫</i><b>数学真题</b></a>
+    <a href="#/p408" data-tab="p408"><i>⌗</i><b>408 真题</b></a>
+    <a href="#/know" data-tab="know"><i>❖</i><b>知识库</b></a>
+    <a href="#/en" data-tab="en"><i>✎</i><b>英语真题</b></a>
+    <a href="#/marks" data-tab="marks"><i>★</i><b>收藏错题</b></a>
+    <a href="#/audit" data-tab="audit"><i>⚑</i><b>数据体检</b></a>
+  </nav>
+
+  <main id="view" tabindex="-1">
+    <div class="boot">正在装载数据…</div>
+  </main>
+</div>
+
+<div id="drawer" hidden><div class="drawer-inner"></div></div>
+<div id="toast" hidden></div>
+<div id="pop" hidden></div>
+
+<script src="vendor/katex/katex.min.js"></script>
+<script src="data/math/index.js"></script>
+<script src="data/en/index.js"></script>
+<script src="data/p408/index.js"></script>
+<script src="data/know/index.js"></script>
+<script src="app.js"></script>
+<script src="views.js"></script>
+<script src="views2.js"></script>
+<script src="app2.js"></script>
+</body>
+</html>

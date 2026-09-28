@@ -1,0 +1,6 @@
+node_modules/
+_vendor/
+.tmp/
+.shots/
+*.qoder.site
+DS_Store

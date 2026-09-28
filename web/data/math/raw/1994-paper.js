@@ -1,0 +1,1 @@
+window.KY=Object.assign(window.KY||{},{"mathraw/1994-paper":{"year":1994,"kind":"paper","text":""}});
