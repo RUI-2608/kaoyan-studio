@@ -117,3 +117,5 @@ node scripts/build-pdf.mjs all         # A4 PDF 套件
 
 最近一次结果：`_research/audit-report.json`（体检通过 16 项、如实提醒 39 条）。
 截图：`.shots/`（22 个场景，含数二列表/试卷/原文、408 卷面顺序与来源旗标、体检页）。
+
+每一轮改了什么、当时凭什么这么决定，记在 [`CHANGELOG.md`](CHANGELOG.md) —— 改版前先读它，别把踩过的坑再踩一遍。
