@@ -30,6 +30,8 @@ vm.createContext(sandbox);
 vm.runInContext(src.replace(/^\s*'use strict';/m, ''), sandbox);
 const rich = (t) => sandbox.rich(t);
 const richInline = (t) => sandbox.richInline(t);
+/* app.js 顶层的 const 不挂在 sandbox 对象上（V8 的全局词法作用域），要用 runInContext 取 */
+const ANS_SRC_LABEL = vm.runInContext('typeof ANS_SRC_LABEL === "undefined" ? {} : ANS_SRC_LABEL', sandbox);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 /* ---------- 打印样式 ---------- */
@@ -150,6 +152,21 @@ function buildMath() {
   return made;
 }
 
+/* ---------- 2b. 数学（二）试卷 ---------- */
+function buildMath2() {
+  const mi = loadJS(path.join(D, 'math2/index.js'));
+  const made = [];
+  for (const row of mi.years.filter((y) => y.usable !== false && y.tier !== 'C')) {
+    const doc = loadJS(path.join(D, 'math2/' + row.year + '.js'));
+    const title = row.year + ' 年数学（二）';
+    const html = page(title, mathPaper(doc, true), doc.audit.n + ' 题 · 分值合计 ' + (doc.audit.score_sum || '—') + ' · 含答案与解析');
+    const base = path.join(TMP, '数学二-' + row.year);
+    fs.writeFileSync(base + '.html', html, 'utf8');
+    made.push({ name: '数学二-' + row.year, html: base + '.html', pdf: path.join(OUT, '数学二试卷-' + title + '.pdf') });
+  }
+  return made;
+}
+
 /* ---------- 3. 408 试卷 ---------- */
 function build408() {
   const pi = loadJS(path.join(D, 'p408/index.js'));
@@ -164,7 +181,7 @@ function build408() {
       ${Object.keys(q.options || {}).length ? `<ul class="opts ${Object.keys(q.options).length === 4 && Object.values(q.options).every((v) => v.length < 42) ? '' : 'one'}">${Object.entries(q.options).map(([k, v]) => `<li><b>${k}</b>${richInline(v)}</li>`).join('')}</ul><div class="gap"></div>` : '<ul class="blank"><li></li><li></li><li></li></ul>'}
     </div>`).join('');
     const answers = `<div class="answers"><h2>答案与解析</h2>` + doc.questions.map((q) => `
-      <div class="ans-line md"><b>${q.no}.</b>　答案：${esc(q.answer || '待核实')}${q.answer_src ? `（来源：${esc(q.answer_src)}）` : ''}
+      <div class="ans-line md"><b>${q.no}.</b>　答案：${esc(q.answer || '待核实')}${q.answer_src ? `（来源：${esc(ANS_SRC_LABEL[q.answer_src] || q.answer_src)}）` : ''}
         ${q.explanation ? `<div class="expl">${rich(q.explanation)}</div>` : ''}
         ${(q.flags || []).length ? `<div class="flags">${esc((q.flags || []).join('；'))}</div>` : ''}</div>`).join('') + '</div>';
     const html = page(`${row.year} 年 408 计算机学科专业基础`,
@@ -185,6 +202,7 @@ fs.mkdirSync(TMP, { recursive: true });
 let jobs = [];
 if (/手册|all/.test(which)) jobs = jobs.concat(buildHandbooks());
 if (/数学|all/.test(which)) jobs = jobs.concat(buildMath());
+if (/数学二|math2|all/.test(which)) jobs = jobs.concat(buildMath2());
 if (/408|all/.test(which)) jobs = jobs.concat(build408());
 console.log(`待出 ${jobs.length} 份 PDF…`);
 let okN = 0, bad = [];

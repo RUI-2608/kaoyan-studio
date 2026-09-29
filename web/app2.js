@@ -125,6 +125,16 @@ document.addEventListener('click', (e) => {
   }
   const rd = closest('[data-read]');
   if (rd) { seen(rd.dataset.read); render(); return; }
+  const sj = closest('[data-subj]');
+  if (sj && sj.dataset.paper) {
+    const want = sj.dataset.subj;
+    $$('article.q').forEach((el) => {
+      const box = el.parentElement && el.parentElement.dataset && el.parentElement.dataset.subj ? el.parentElement : el;
+      box.style.display = want === '全部' || box.dataset.subj === want ? '' : 'none';
+    });
+    $$('[data-subj]').forEach((b) => { if (b.tagName === 'BUTTON') b.classList.toggle('primary', b.dataset.subj === want); });
+    return;
+  }
   const jump = closest('[data-jump]');
   if (jump) { const el = document.getElementById(jump.dataset.jump); if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' }); return; }
   const goto = closest('[data-goto]');
@@ -167,18 +177,22 @@ document.addEventListener('click', (e) => {
     return;
   }
   const raw = closest('[data-raw]');
-  if (raw) { location.hash = `#/math/${raw.dataset.raw}?raw=1`; openRaw(+raw.dataset.raw); return; }
+  if (raw) { const [dir, yy] = raw.dataset.raw.split('/'); location.hash = `#/${dir}/${yy}?raw=1`; openRaw(dir, +yy); return; }
 });
 
-async function openRaw(year) {
-  const idx = await M.mathIdx(); const meta = idx.years.find((y) => y.year === year);
+async function openRaw(dir, year) {
+  const m = MATH[dir === 'math2' ? 'math2' : 'math1'];
+  const idx = await m.idx(); const meta = idx.years.find((y) => y.year === year);
   const v = $('#view'); v.innerHTML = '<div class="boot">读取原文…</div>';
-  await mathRawView(v, year, meta || { notes: [] }, idx);
+  await mathRawView(v, year, meta || { notes: [] }, idx, m);
 }
 /* 背题模式下未展开的卡：从数据里取该题重新渲染解析 */
 async function fetchReveal(card, id) {
-  const m = id.match(/^(\d{4})-(\d+)-(\d+)$/);
-  if (m) { try { const doc = await M.math(+m[1]); const sec = doc.sections[+m[2] - 1]; const q = sec && sec.questions.find((x) => String(x.local_no) === m[3]); if (q) { seen(id); return revealHTML({ ...q, answer: q.answer, analysis: q.analysis }, 'math'); } } catch (e) { } }
+  let m = id.match(/^(m2-)?(\d{4})-(\d+)-(\d+)$/);
+  if (m) {
+    const loader = m[1] ? M.m2 : M.math;
+    try { const doc = await loader(+m[2]); const sec = doc.sections[+m[3] - 1]; const q = sec && sec.questions.find((x) => String(x.local_no) === m[4]); if (q) { seen(id); return revealHTML({ ...q, answer: q.answer, analysis: q.analysis }, 'math'); } } catch (e) { }
+  }
   const p = id.match(/^(\d{4})-(\d{1,2})$/);
   if (p) { try { const doc = await M.p408(+p[1]); const q = doc.questions.find((x) => x.id === id); if (q) { seen(id); return revealHTML(q, 'p408'); } } catch (e) { } }
   const e = id.match(/^(en[12])(\d{4})-(\d{1,2})$/);

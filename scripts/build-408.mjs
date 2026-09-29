@@ -16,6 +16,8 @@ const VENDOR = path.join(ROOT, '_vendor/408-exam-paper');
 const OUT = path.join(ROOT, 'web/data/p408');
 const PDF = path.join(ROOT, 'web/papers/408');
 import { parseAnswers } from './lib-408-answers.mjs';
+import { altGrid, altExplanations, altStemMatch } from './lib-408-alt.mjs';
+import { thirdYear } from './lib-408-third.mjs';
 
 const POPPLER = ['C:/Program Files/Git/mingw64/bin/pdftotext.exe', 'C:/Program Files (x86)/Git/mingw64/bin/pdftotext.exe', 'pdftotext']
   .find((c) => c === 'pdftotext' || fs.existsSync(c)) || 'pdftotext';
@@ -84,6 +86,7 @@ const years = [];
 for (let y = 2009; y <= 2025; y++) years.push(y);
 
 const rows = [];
+const built = [];
 for (const year of years) {
   const paperFile = path.join(VENDOR, `papers-rebuild/${year}.pdf`);
   const ansFile = path.join(VENDOR, `answers/${year}-answer.pdf`);
@@ -99,22 +102,61 @@ for (const year of years) {
 
   const qs = parsePaper(pTxt);
   const { map: key, note: knote } = parseAnswers(aTxt);
+  /* 第二来源（CodePanda66 的解析本，有文字层）：主源没有答案/解析时来补，两边都有但不一致就点名。
+     但它必须先自证是这一年这套卷子：拿它印的题干和主源逐题比对，八成对不上就整本弃用。
+     （2009 一度匹配到「2009-2017 合集」，题号错位——正是这道闸拦下来的。） */
+  const alt = altGrid(year);
+  const altMatch = altStemMatch(year, qs.map((q) => ({ no: q.no, kind: q.kind, stem: q.stem.join(' ') })));
+  /* 闸门：第二来源印的题干要和主源逐题对得上（≥80%，且至少 20 题可比），否则整本弃用。
+     过了这道闸，逐题解析块（答案写在题号那一行上）就可以用；答案表网格还额外要求 1..40 凑齐。 */
+  const altUsable = altMatch.cmp >= 20 && altMatch.rate >= 0.8;
+  const altGridUsable = altUsable && alt.ok;
+  const altEx = altUsable ? altExplanations(year) : new Map();
+  const altWhy = !alt.file ? '没有第二来源这一年的文件'
+    : altMatch.cmp < 20 ? '第二来源里读不出可对照的题干'
+    : altMatch.rate < 0.8 ? `第二来源的题干与主源只有 ${Math.round(altMatch.rate * 100)}% 对得上，可能是另一套卷子`
+    : null;
+  const gridWhy = altWhy || (!alt.ok ? `答案表没凑齐 40 个（有 ${alt.have} 个${alt.clash ? `、自相矛盾 ${alt.clash} 处` : ''}）` : null);
+  knote.alt_self_clash = 0;
   const questions = qs.map((q) => {
     const k = key.get(q.no) || {};
+    const ae = altEx.get(q.no);
     const stem = q.stem.join(' ').replace(/\s{2,}/g, ' ').replace(/\uFFFD/g, '?').trim();
     const options = Object.fromEntries(Object.entries(q.options).map(([a, v]) => [a, v.join(' ').replace(/\s{2,}/g, ' ').trim()]));
+    let answer = k.answer || null, answer_src = k.src || null;
+    const altLetter = q.kind === 'choice' && altGridUsable ? alt.map.get(q.no) : null;
     const flags = [];
     if (q.kind === 'choice' && Object.keys(options).length !== 4) flags.push(`选项数 ${Object.keys(options).length}（应 4 个）`);
     if (!stem || stem.length < 8) flags.push('题干过短');
     if (FIG_RE.test(stem) || Object.values(options).some((v) => FIG_RE.test(v))) flags.push('含图：文字版可能不完整，请对原卷');
-    if (q.kind === 'choice' && !k.answer) flags.push('答案待核实（本年答案卷是扫描件或排版没认出来）');
-    if (k.src === 'letter-run') flags.push(knote.runKind === 'scattered' ? '答案按卷首字母表顺序对应题号' : '答案取自卷首 40 字母串（按位置对应）');
-    if (knote.conflictNos.has(q.no)) flags.push(`答案的两个来源不一致（此处取 ${k.answer}），务必对原卷`);
-    if (!(k.explanation || '').length) flags.push('解析未抽出');
+    if (!answer && altLetter) { answer = altLetter; answer_src = 'alt-grid'; }
+    else if (answer && altLetter && altLetter !== String(answer)[0]) {
+      knote.conflicts.push({ no: q.no, a: answer, b: altLetter });
+      knote.conflictNos.add(q.no);
+    }
+    /* 逐题解析块里的「解答：X／【答案】X」：题号写在这一行上，比位置网格更可靠。
+       同年如果两种排法都在（表格 + 逐题），两值不一致就当没这题的答案，标待核实。 */
+    const altBlockLetter = q.kind === 'choice' && ae && ae.answer ? ae.answer : null;
+    if (altBlockLetter && altLetter && altBlockLetter !== altLetter) {
+      knote.alt_self_clash++;
+      knote.conflicts.push({ no: q.no, a: `表${altLetter}`, b: `块${altBlockLetter}` });
+      knote.conflictNos.add(q.no);
+    } else if (!answer && altBlockLetter) { answer = altBlockLetter; answer_src = 'alt-block'; }
+    else if (answer && altBlockLetter && altBlockLetter !== String(answer)[0] && !knote.conflictNos.has(q.no)) {
+      knote.conflicts.push({ no: q.no, a: answer, b: altBlockLetter });
+      knote.conflictNos.add(q.no);
+    }
+    if (q.kind === 'choice' && !answer) flags.push(`答案待核实（两个来源都取不到：${altWhy || gridWhy || '主源答案卷没认出这一题'}）`);
+    if (answer_src === 'alt-grid') flags.push(`答案取自第二来源参考答案表（${alt.file}，该年题干比对 ${Math.round(altMatch.rate * 100)}% 相符）`);
+    if (answer_src === 'alt-block') flags.push(`答案取自第二来源逐题解析（${alt.file}）`);
+    if (knote.conflictNos.has(q.no)) flags.push(`两个来源的答案不一致（此处取 ${answer}），务必对原卷`);
+    let explanation = k.explanation || '';
+    if (!explanation && ae && ae.text) { explanation = ae.text; flags.push('解析取自第二来源'); }
+    if (!explanation) flags.push('解析未抽出');
     const g = guessSubject(stem + ' ' + Object.values(options).join(' '));
     return {
       no: q.no, id: `${year}-${q.no}`, kind: q.kind, section: q.section, subject: g.name, subject_hits: g.hits,
-      stem, options, answer: k.answer || null, answer_src: k.src || null, explanation: k.explanation || '', flags: [...new Set(flags)],
+      stem, options, answer, answer_src, explanation, flags: [...new Set(flags)],
     };
   });
   const choice = questions.filter((q) => q.kind === 'choice');
@@ -126,22 +168,97 @@ for (const year of years) {
     n_full_options: choice.filter((q) => Object.keys(q.options).length === 4).length,
     n_with_figure: questions.filter((q) => q.flags.some((f) => f.startsWith('含图'))).length,
     n_unknown_subject: questions.filter((q) => !q.subject).length,
-    answer_from: { perQuestion: knote.perQuestion, grid: knote.grid, run: knote.run, runLength: knote.runLength, runKind: knote.runKind, gridOk: knote.gridOk },
+    answer_from: { perQuestion: knote.perQuestion, grid: knote.grid, altGrid: questions.filter((q) => q.answer_src === 'alt-grid').length, altBlock: questions.filter((q) => q.answer_src === 'alt-block').length, gridOk: knote.gridOk },
     conflicts: knote.conflicts.slice(0, 6), n_conflicts: knote.conflicts.length, ambiguous: knote.ambiguous,
     answer_txt_chars: aTxt.replace(/\s/g, '').length,
     /* 替换符是抽取时留下的「这个字认不出」记号，数量进体检，别当成正常文字 */
     ocr_noise: (pTxt.match(/\uFFFD/g) || []).length + (aTxt.match(/\uFFFD/g) || []).length,
+    alt: {
+      usable: altUsable, why: altWhy, grid_usable: altGridUsable, grid_why: gridWhy, grid_ok: alt.ok,
+      file: alt.file || null, have: alt.have || 0, clash: alt.clash || 0, self_clash: knote.alt_self_clash,
+      stem_cmp: altMatch.cmp, stem_match: +altMatch.rate.toFixed(3),
+      used: questions.filter((q) => q.answer_src === 'alt-grid').length,
+      used_block: questions.filter((q) => q.answer_src === 'alt-block').length,
+      ex_used: questions.filter((q) => (q.flags || []).includes('解析取自第二来源')).length,
+    },
     chars: pTxt.length, ok: choice.length >= 38 && essay.length >= 5,
   };
-  emitJS(path.join(OUT, `${year}.js`), `p408/${year}`, {
-    year, subject: '408',
-    sources: { repo: 'github.com/neville-studio/408-exam-paper', license: 'MIT', paper: `papers/408/${year}-试卷.pdf`, answer: `papers/408/${year}-答案解析.pdf` },
-    title: `${year} 年计算机学科专业基础综合试题`,
-    sections: [...new Map(questions.map((q) => [q.section, q.section])).keys()].filter(Boolean),
-    questions, audit,
+  built.push({
+    year, questions, audit, rows_note: { altWhy, gridWhy },
+    doc: {
+      year, subject: '408',
+      sources: { repo: 'github.com/neville-studio/408-exam-paper', license: 'MIT', paper: `papers/408/${year}-试卷.pdf`, answer: `papers/408/${year}-答案解析.pdf`,
+        alt: altUsable ? { repo: 'github.com/CodePanda66/CSPostgraduate-408', file: `408Exam/${alt.file}`, stem_match: +altMatch.rate.toFixed(3) } : null },
+      title: `${year} 年计算机学科专业基础综合试题`,
+      sections: [...new Map(questions.map((q) => [q.section, q.section])).keys()].filter(Boolean),
+      questions, audit,
+    },
   });
   rows.push(audit);
 }
+
+/* ---------- 第三来源：先标定通道，再补空 ----------
+   这批答案本只有答案没有题干，无法像第二来源那样比对题干自证身份，
+   所以拿它去撞本站已经确认过的年份；撞得准（≥90% 且样本 ≥40 题）才允许它补空白年份。 */
+const calib = [];
+for (const b of built) {
+  const e = thirdYear(b.year);
+  if (!e) continue;
+  const useBlocks = e.blocks.size >= 20;
+  const src = useBlocks ? e.blocks : e.grid.map;
+  let cmp = 0, agree = 0;
+  const dis = [];
+  for (const q of b.questions) {
+    if (q.kind !== 'choice' || !q.answer || !src.has(q.no)) continue;
+    cmp++;
+    if (src.get(q.no) === q.answer) agree++;
+    else if (dis.length < 4) dis.push(`#${q.no} 本站${q.answer}/三源${src.get(q.no)}`);
+  }
+  calib.push({ year: b.year, file: e.file, via: useBlocks ? '逐题块' : '答案表', have: e.grid.have, block_have: e.blocks.size, cmp, agree, rate: cmp ? agree / cmp : 0, dis, filled: 0, ex_filled: 0, usable: e.grid.ok || useBlocks });
+}
+const cmpTotal = calib.reduce((a, c) => a + c.cmp, 0);
+const agreeTotal = calib.reduce((a, c) => a + c.agree, 0);
+const thirdOk = cmpTotal >= 40 && agreeTotal / cmpTotal >= 0.9;
+const thirdRate = cmpTotal ? agreeTotal / cmpTotal : 0;
+
+if (thirdOk) {
+  for (const c of calib) {
+    const b = built.find((x) => x.year === c.year);
+    if (!b) continue;
+    const e = thirdYear(b.year);
+    if (!e) continue;
+    const useBlocks = e.blocks.size >= 20;
+    const src = useBlocks ? e.blocks : e.grid.map;
+    const calibYears = calib.filter((x) => x.cmp).map((x) => x.year).join('/');
+    for (const q of b.questions) {
+      if (q.kind !== 'choice' || q.answer || !src.has(q.no)) continue;
+      q.answer = src.get(q.no);
+      q.answer_src = useBlocks ? 'third-block' : 'third-grid';
+      const note = `答案取自第三来源 ${e.file}（该通道在 ${calibYears} 年共 ${agreeTotal}/${cmpTotal} 题与已核实答案一致）`;
+      q.flags = [...new Set([...q.flags.filter((f) => !f.startsWith('答案待核实')), note])];
+      c.filled++;
+    }
+    for (const q of b.questions) {
+      if ((q.explanation || '').length > 20 || !e.exps.has(q.no)) continue;
+      q.explanation = e.exps.get(q.no);
+      q.flags = [...new Set([...q.flags.filter((f) => !f.startsWith('解析未抽出')), '解析取自第三来源'])];
+      c.ex_filled++;
+    }
+  }
+}
+
+/* 补完重算各年体检数，别让报告停在补之前的数字上 */
+for (const b of built) {
+  const choice = b.questions.filter((q) => q.kind === 'choice');
+  b.audit.n_answer = choice.filter((q) => q.answer).length;
+  b.audit.n_explanation = b.questions.filter((q) => (q.explanation || '').length > 20).length;
+  const c = calib.find((x) => x.year === b.year);
+  b.audit.third = c ? { ...c, channel_ok: thirdOk, channel_rate: +thirdRate.toFixed(3) } : { present: false, channel_ok: thirdOk, channel_rate: +thirdRate.toFixed(3) };
+  b.audit.answer_from.third = c ? c.filled : 0;
+  b.doc.sources.third = c ? { repo: 'github.com/JDC2001/408', file: `答案/${c.file}`, via: c.via, channel: `标定 ${agreeTotal}/${cmpTotal}` } : null;
+}
+
+for (const b of built) emitJS(path.join(OUT, `${b.year}.js`), `p408/${b.year}`, b.doc);
 
 const ok = rows.filter((r) => r.ok);
 const sum = (k) => ok.reduce((a, b) => a + (b[k] || 0), 0);
@@ -152,18 +269,32 @@ const index = {
   license_note: 'MIT License © Neville Studio；试卷原文版权归命题机构，本站仅作个人备考用途。',
   caveat: '重排版 PDF 的文字里不含插图与部分公式符号；标了「含图」的题务必对照原卷 PDF。题目所属科目是按关键词猜的，可能错。',
   years: rows,
+  third: {
+    repo: 'github.com/JDC2001/408', adopted: thirdOk, cmp: cmpTotal, agree: agreeTotal, rate: +thirdRate.toFixed(3),
+    note: thirdOk ? `第三来源通道在 ${calib.filter((c) => c.cmp).map((c) => c.year).join('/')} 年共 ${cmpTotal} 题上与已核实答案一致（${Math.round(thirdRate * 100)}%），据此补其余年份` : `第三来源通道只撞上 ${agreeTotal}/${cmpTotal}，不到 90%，未采用`,
+    per_year: calib,
+  },
   totals: {
     years: ok.length, questions: sum('n'), choice: sum('n_choice'), essay: sum('n_essay'),
     with_answer: sum('n_answer'), with_explanation: sum('n_explanation'), figures: sum('n_with_figure'), full_options: sum('n_full_options'),
+    from_third: built.reduce((a, y) => a + ((y.audit.third || {}).filled || 0), 0),
+    third_ex: built.reduce((a, y) => a + ((y.audit.third || {}).ex_filled || 0), 0),
   },
 };
 emitJS(path.join(OUT, 'index.js'), 'p408/index', index);
 
 const pad = (v, n) => String(v ?? '').padEnd(n, ' ');
-console.log(pad('年份', 6) + pad('题数', 6) + pad('单选', 6) + pad('有答案', 7) + pad('有解析', 7) + pad('满4项', 7) + pad('含图', 6) + pad('答案来源', 22) + '冲突');
+console.log(pad('年份', 6) + pad('题数', 6) + pad('单选', 6) + pad('有答案', 7) + pad('有解析', 7) + pad('满4项', 7) + pad('含图', 6) + pad('答案来源', 40) + '第二源题干比对 / 冲突');
 for (const r of rows) {
   if (!r.n && r.why) { console.log(pad(r.year, 6) + r.why); continue; }
-  const src = [`逐题${r.answer_from.perQuestion}`, `网格${r.answer_from.grid}`, `字母串${r.answer_from.run}/${r.answer_from.runLength}${r.answer_from.runKind ? '(' + r.answer_from.runKind + ')' : ''}`].join(' ');
-  console.log(pad(r.year, 6) + pad(r.n, 6) + pad(r.n_choice, 6) + pad(r.n_answer, 7) + pad(r.n_explanation, 7) + pad(r.n_full_options, 7) + pad(r.n_with_figure, 6) + pad(src, 30) + (r.n_conflicts ? `${r.n_conflicts} 处：` + r.conflicts.map((c) => `#${c.no} ${c.a}/${c.b}`).slice(0, 2).join(' ') : '无冲突'));
+  const src = [`逐题${r.answer_from.perQuestion}`, `主源网格${r.answer_from.grid}`, `二源表${r.alt.used}`, `二源逐题${r.alt.used_block}`, `三源${r.answer_from.third || 0}`].join(' ');
+  const gate = !r.alt.usable ? `整本弃用（${r.alt.why || '未知原因'}）`
+    : r.alt.grid_usable ? `${Math.round(r.alt.stem_match * 100)}% 题干相符·表+逐题` : `${Math.round(r.alt.stem_match * 100)}% 题干相符·只用逐题（${r.alt.grid_why}）`;
+  console.log(pad(r.year, 6) + pad(r.n, 6) + pad(r.n_choice, 6) + pad(r.n_answer, 7) + pad(r.n_explanation, 7) + pad(r.n_full_options, 7) + pad(r.n_with_figure, 6) + pad(src, 44) + pad(gate, 34) + (r.n_conflicts ? `${r.n_conflicts} 处：` + r.conflicts.map((c) => `#${c.no} ${c.a}/${c.b}`).slice(0, 2).join(' ') : '无冲突'));
 }
+console.log('\n第三来源标定（通道级，先撞已知年份再补空）：');
+for (const c of calib) {
+  console.log(pad(c.year, 6) + pad(c.file, 30) + pad(c.via, 8) + '可比 ' + pad(c.cmp, 4) + '一致 ' + pad(c.agree, 4) + (c.cmp ? pad(Math.round(c.rate * 100) + '%', 6) : pad('—', 6)) + pad('补答案 ' + c.filled, 10) + pad('补解析 ' + c.ex_filled, 11) + c.dis.join(' '));
+}
+console.log('\n' + index.third.note + (index.third.adopted ? '，已采用' : '，未采用'));
 console.log('\n合计：', JSON.stringify(index.totals));

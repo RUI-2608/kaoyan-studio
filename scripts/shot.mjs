@@ -32,12 +32,17 @@ if (!EDGE) { console.error('找不到 Edge/Chrome'); process.exit(1); }
 const SCENES = [
   { name: 'home-1024', hash: '#/', size: [1024, 768] },
   { name: 'math-list-1024', hash: '#/math', size: [1024, 768] },
+  { name: 'math2-list-1024', hash: '#/math2', size: [1024, 768] },
+  { name: 'math2-paper-1024', hash: '#/math2/2015', size: [1024, 768], scroll: 520 },
+  { name: 'math2-raw-1024', hash: '#/math2/1998', size: [1024, 768] },
   { name: 'math-paper-1024', hash: '#/math/2015', size: [1024, 768], scroll: 620 },
   { name: 'math-paper-opts', hash: '#/math/2015', size: [1024, 768], click: '.opt' },
   { name: 'math-exam-1024', hash: '#/math/2015', size: [1024, 768], clickText: '考试' },
   { name: 'math-raw-1024', hash: '#/math/2001', size: [1024, 768] },
   { name: 'p408-list-1024', hash: '#/p408', size: [1024, 768] },
   { name: 'p408-paper-1024', hash: '#/p408/2023', size: [1024, 768], scroll: 520 },
+  { name: 'p408-prov-1024', hash: '#/p408/2022', size: [1024, 768], clickText: '背题', scroll: 700 },
+  { name: 'p408-filter-1024', hash: '#/p408/2023', size: [1024, 768], click: 'button[data-subj="计算机网络"]' },
   { name: 'know-1024', hash: '#/know', size: [1024, 768] },
   { name: 'know-co-1024', hash: '#/know/co', size: [1024, 768] },
   { name: 'know-ds-math-1024', hash: '#/know/math', size: [1024, 768], scroll: 400 },
@@ -45,6 +50,7 @@ const SCENES = [
   { name: 'en-list-834', hash: '#/en', size: [834, 1112] },
   { name: 'marks-1024', hash: '#/marks', size: [1024, 768] },
   { name: 'audit-1024', hash: '#/audit', size: [1024, 768] },
+  { name: 'audit-p408-1024', hash: '#/audit', size: [1024, 768], scroll: 1780 },
   { name: 'home-portrait', hash: '#/', size: [768, 1024] },
   { name: 'math-phone', hash: '#/math/2015', size: [390, 844], dpr: 3 },
 ];
@@ -98,6 +104,9 @@ async function shoot(cdp, scene) {
   const errs = await cdp.send('Runtime.evaluate', { expression: `(window.__errs||[]).join(' | ').slice(0,400)`, returnByValue: true });
   const e = errs.result && errs.result.value;
   if (e) console.log('   ! 页面报错：', e);
+  /* 服务器没起来时浏览器会画出自己的错误页 —— 那不算截图成功，必须判出来 */
+  const alive = await cdp.send('Runtime.evaluate', { expression: `!!document.querySelector('#view') && (window.KY || document.title.indexOf('考研') >= 0)`, returnByValue: true });
+  if (!alive.result || !alive.result.value) { console.log('✗', scene.name, '页面没加载（服务器没起？先跑 node scripts/serve.mjs）'); return; }
   if (PROBE !== null) {
     const r = await cdp.send('Runtime.evaluate', { expression: PROBE || 'document.title', returnByValue: true });
     console.log(scene.name, '=>', r.result && r.result.value);

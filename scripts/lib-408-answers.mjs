@@ -1,19 +1,36 @@
-/* 408 答案抽取：三条通道，可靠度从高到低
+/* 408 答案抽取：两条通道，可靠度从高到低
  *
  *   1) 逐题块里的显式标记：「N.【参考答案】D」「故选 C」「应选 B」「答案为 A」
  *   2) 卷首网格：要求 1..40 每个号都出现、同号不冲突，否则整张表作废
- *   3) 卷首 40 字母串：去掉非 A-D 后**正好** 40 个才按位置对应（38、41 个一律不用）
  *
- * 三条都不成立就留 null，由调用方标「答案待核实」。位置错一位整卷答案全错，
+ * 两条都不成立就留 null，由调用方标「答案待核实」。位置错一位整卷答案全错，
  * 这种代价不能靠猜来冒。
+ *
+ * 曾有的第 3 条「把卷首 40 个 A-D 按位置对应题号」已删除，原因见文件末尾注释。
  */
-const ANS_PAT = /【\s*(?:参考)?答\s*案\s*】\s*[（(]?\s*([A-D])|(?:参考)?答\s*案\s*[）)]?\s*[:：是为选]\s*[（(]?\s*([A-D])|故\s*(?:选|应选|答案选)\s*[（(]?\s*([A-D])|应\s*选\s*[（(]?\s*([A-D])|正确的?选项\s*(?:是|为)\s*[（(]?\s*([A-D])|(?:因此|所以|可见|则)\s*选\s*[（(]?\s*([A-D])(?![A-Za-z])/g;
+const ANS_PAT = /【\s*(?:参考)?答\s*案\s*】\s*[（(]?\s*([A-D])|(?:参考)?答\s*案\s*[）)]?\s*[:：是为选]\s*[（(]?\s*([A-D])|故\s*(?:选|应选|答案选)\s*[（(]?\s*([A-D])|应\s*选\s*[（(]?\s*([A-D])|正确的?选项\s*(?:是|为)\s*[（(]?\s*([A-D])|(?:因此|所以|可见|则)\s*选\s*[（(]?\s*([A-D])(?![A-Za-z])|解\s*答\s*[:：是为]\s*[（(]?\s*([A-D])(?![A-Za-z])/g;
+
+export function answerHits(blk) {
+  return [...blk.matchAll(ANS_PAT)]
+    .map((m) => ({ letter: m.slice(1).find((x) => x) || null, at: m.index, raw: m[0] }))
+    .filter((h) => h.letter);
+}
 
 export function answersFromBlock(blk) {
-  const hits = [...blk.matchAll(ANS_PAT)].map((m) => m.slice(1).find((x) => x) || null).filter(Boolean);
+  const hits = answerHits(blk);
   if (!hits.length) return null;
   /* 解析里可能提到别的选项字母，结论总在末尾 —— 取最后一个；前后不一致要报出来 */
-  return { letter: hits[hits.length - 1], multi: new Set(hits).size > 1 ? hits.join('/') : null };
+  const letters = hits.map((h) => h.letter);
+  return { letter: letters[letters.length - 1], at: hits[hits.length - 1].at, raw: hits[hits.length - 1].raw, multi: new Set(letters).size > 1 ? letters.join('/') : null };
+}
+
+/** 把块开头的「【参考答案】B」「【解析】」「解答：」这类标记切掉，只留正文。
+ *  三个来源的排版都不一样，标记残留成「解析】……」很难看，所以统一走这里。 */
+export function stripLeadMarkers(blk) {
+  return String(blk || '')
+    .replace(/^\s*(?:【\s*(?:参考)?答\s*案\s*】\s*[A-D]?\s*[。.]?\s*)?/, '')
+    .replace(/^\s*(?:【\s*(?:解析|详解|解答|分析)\s*】|解\s*析\s*[:：]?|解\s*答\s*[:：]?|答\s*案\s*[:：]?|分\s*析\s*[:：]?)/, '')
+    .trim();
 }
 
 export function parseAnswers(txt) {
@@ -31,7 +48,7 @@ export function parseAnswers(txt) {
     const blk = txt.slice(start, end).replace(/\s+/g, ' ').trim();
     if (!(no >= 1 && no <= 60) || blk.length < 4) continue;
     const a = answersFromBlock(blk);
-    const exp = blk.replace(/^[^\u4e00-\u9fff]{0,8}?(?:【\s*(?:参考)?答\s*案\s*】|解析|答案)?[^\u4e00-\u9fff]{0,6}/, '').trim();
+    const exp = stripLeadMarkers(blk);
     const prev = byNo.get(no) || {};
     byNo.set(no, {
       answer: a ? a.letter : (prev.answer || null),
@@ -71,26 +88,11 @@ export function parseAnswers(txt) {
     }
   }
 
-  /* ---- 3) 字母串：没有可用网格时，看卷首区里的 A-D 字母 ----
-     两种形态都要求「正好 40 个」：连续串（2010/2011 那样），或被打散在编号之间但顺序就是 1..40（2013/2016/2017）。
-     差一个都不用 —— 位置错一位，整卷答案全错。 */
-  if (!note.gridOk) {
-    const zone = txt.slice(0, Math.max(2600, txt.length * 0.3));
-    const runs = [...zone.matchAll(/[A-D](?:[\s]*[A-D]){25,}/g)]
-      .map((m) => m[0].replace(/[^A-D]/g, '')).sort((a, b) => b.length - a.length);
-    const contiguous = runs[0] ? runs[0].length : 0;
-    const scattered = (zone.slice(0, 900).match(/[A-D]/g) || []).join('');
-    const seq = contiguous === 40 ? runs[0] : (scattered.length === 40 ? scattered : null);
-    note.runLength = contiguous || scattered.length;
-    note.runKind = seq ? (contiguous === 40 ? 'contiguous' : 'scattered') : null;
-    if (seq) {
-      for (let i = 0; i < 40; i++) {
-        const no = i + 1;
-        const prev = byNo.get(no) || {};
-        if (!prev.answer) { byNo.set(no, { ...prev, answer: seq[i], src: 'letter-run' }); note.run++; }
-        else if (prev.answer !== seq[i]) { note.conflicts.push({ no, a: prev.answer, b: seq[i] }); note.conflictNos.add(no); }
-      }
-    }
-  }
+  /* ---- 3) 字母串通道已删除 ----
+     原来「把卷首的 A-D 连成 40 个字母按位置对应」在竖排答案表上是错的：
+     答案表常印成「1．B 9．B 17．B 25．C 33．C / 2．B 10．D …」，按文字流读出来是
+     1,9,17,25,33,2,10… 而不是 1,2,3…，位置一错整卷全错。
+     实测这样读出来的答案与第二来源在 2010 有 29/40 处不一致（随机水平），故只保留
+     「题号 + 字母」成对出现的通道（网格与逐题标记），它们天然带题号，不会错位。 */
   return { map: byNo, note };
 }

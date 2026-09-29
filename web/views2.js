@@ -29,8 +29,7 @@ route(/^p408\/(\d{4})$/, async (v, [y]) => {
   const s = sess(key);
   const choice = doc.questions.filter((q) => q.kind === 'choice');
   const essay = doc.questions.filter((q) => q.kind !== 'choice');
-  const bySubject = {};
-  doc.questions.forEach((q) => { const k = q.subject || '未归类'; (bySubject[k] = bySubject[k] || []).push(q); });
+  const subs = ['全部', ...uniq(doc.questions.map((q) => q.subject).filter(Boolean)), '未归类'];
   v.innerHTML = `
   <div class="row" style="margin-bottom:10px">
     <a class="btn ghost sm" href="#/p408">‹ 回 408 列表</a>
@@ -43,14 +42,17 @@ route(/^p408\/(\d{4})$/, async (v, [y]) => {
   </div>
   ${timerHTML(key)}
   <div class="sheet">
-    <div class="row"><span class="chip dim">单选 ${choice.length}</span><span class="chip dim">综合 ${essay.length}</span>
-      <span class="chip gold">按关键词猜的科目分类，可能错</span>
+    <div class="row"><span class="chip dim">一、单选 ${choice.length} 题（每题 2 分）</span><span class="chip dim">二、综合应用 ${essay.length} 题</span>
       <span class="spacer"></span><button class="btn primary sm" data-submit="${key}" ${s.mode === 'exam' ? '' : 'disabled'}>提交判分</button></div>
+    <div class="row" style="margin-top:8px;align-items:center"><span class="note">按科目筛（科目是按题干关键词猜的，可能错）：</span>
+      ${subs.map((k) => `<button class="btn sm" data-subj="${esc(k)}" data-paper="${key}">${esc(k)}${k === '全部' ? '' : ' ' + (k === '未归类' ? doc.questions.filter((q) => !q.subject).length : doc.questions.filter((q) => q.subject === k).length)}</button>`).join('')}</div>
     <div id="scorebox"></div>
-    <div class="en-tools" style="margin-top:10px">${Object.keys(bySubject).map((k) => `<button class="btn sm" data-jump="sub-${esc(k)}">${esc(k)} ${bySubject[k].length}</button>`).join('')}</div>
     <hr class="rule">
-    ${Object.entries(bySubject).map(([k, list]) => `<div class="sect-h" id="sub-${esc(k)}" style="color:#7a5f21;font-size:1em">${esc(k)}<span class="note" style="margin-left:8px">按题干关键词自动归类</span></div>
-      ${list.map((q, i) => qcard(q, i, q.kind === 'choice' ? 'p408' : 'essay', key)).join('')}`).join('')}
+    <div class="sect-h" style="color:#7a5f21;font-size:1em">一、单项选择题（${choice.length} 小题，每小题 2 分，共 80 分）</div>
+    ${choice.map((q, i) => `<div data-subj="${esc(q.subject || '未归类')}">${qcard(q, i, 'p408', key)}</div>`).join('')}
+    <div class="sect-h" style="color:#7a5f21;font-size:1em">二、综合应用题（${essay.length} 小题）</div>
+    ${essay.map((q, i) => `<div data-subj="${esc(q.subject || '未归类')}">${qcard(q, i, 'essay', key)}</div>`).join('')}
+    <p class="note">卷面顺序就是真题原顺序（1–40 单选、41 起综合）。${doc.audit.n_with_figure || 0} 道题题干里出现「如图/电路/树形图」等字样，重排 PDF 的文字层不含图形 —— 这些题已标旗标，务必点开原卷 PDF 核对。</p>
   </div>`;
   paintScore(key, doc.questions, 'p408');
 });
@@ -189,7 +191,7 @@ async function collect(ids) {
   const groups = new Map();
   const put = (key, meta, id) => { if (!groups.has(key)) groups.set(key, { ...meta, ids: [] }); groups.get(key).ids.push(id); };
   for (const id of uniq(ids)) {
-    let g = id.match(/^(\d{4})-(\d+)-(\d+)$/); if (g) { put("math:" + g[1], { t: "math", y: +g[1] }, id); continue; }
+    let g = id.match(/^(m2-)?(\d{4})-(\d+)-(\d+)$/); if (g) { const p = g[1] || ''; put("math" + (p ? '2:' : '1:') + g[2], { t: p ? 'math2' : 'math', y: +g[2], pfx: p }, id); continue; }
     g = id.match(/^(\d{4})-(\d{1,2})$/); if (g) { put("p408:" + g[1], { t: "p408", y: +g[1] }, id); continue; }
     g = id.match(/^(en[12])(\d{4})-(\d{1,2})$/); if (g) { put("en:" + g[1] + g[2], { t: "en", exam: g[1], y: +g[2] }, id); continue; }
     g = id.match(/^([a-z]+)-(\d{2})$/); if (g) { put("know:" + g[1], { t: "know", sub: g[1] }, id); }
@@ -197,10 +199,10 @@ async function collect(ids) {
   for (const [key, grp] of groups) {
     const want = new Set(grp.ids);
     try {
-      if (grp.t === "math") {
-        const doc = await M.math(grp.y);
+      if (grp.t === "math" || grp.t === "math2") {
+        const doc = grp.t === "math2" ? await M.m2(grp.y) : await M.math(grp.y);
         doc.sections.forEach((sec, i) => sec.questions.forEach((q) => {
-          const id = grp.y + "-" + (i + 1) + "-" + q.local_no;
+          const id = (grp.pfx || "") + grp.y + "-" + (i + 1) + "-" + q.local_no;
           if (want.has(id)) out.push({ q: { ...q, id, section: sec.cn }, kind: sec.kind === "solution" ? "essay" : "math", key });
         }));
       } else if (grp.t === "p408") {
@@ -224,18 +226,26 @@ async function collect(ids) {
 }
 /* ================= 数据体检 ================= */
 route(/^audit$/, async (v) => {
-  const [mi, ei, pi, ki] = await Promise.all([M.mathIdx(), M.enIdx(), M.pIdx(), M.kIdx()]);
+  const [mi, m2, ei, pi, ki] = await Promise.all([M.mathIdx(), M.m2Idx(), M.enIdx(), M.pIdx(), M.kIdx()]);
   const rowsM = mi.years.map((y) => `<tr class="${y.tier === 'C' ? 'bad' : ''}"><td>${y.year}</td><td>${esc(y.tier === 'C' ? '只读原文' : y.tier + ' 档')}</td><td class="num">${num(y.n)}</td><td class="num">${num(y.declared_n)}</td><td class="num">${num(y.n_stem)}</td><td class="num">${num(y.n_answered)}</td><td class="num">${num(y.n_analysis)}</td><td class="num">${num(y.n_full_options)}/${num(y.n_choice)}</td><td class="num">${num(y.score_sum)}</td><td>${esc((y.notes || []).join('；') || '—')}</td></tr>`).join('');
-  const rowsP = pi.years.map((y) => `<tr class="${!y.ok || y.n_answer < y.n_choice ? 'bad' : ''}"><td>${y.year}</td><td class="num">${num(y.n)}</td><td class="num">${num(y.n_choice)}</td><td class="num">${num(y.n_answer)}</td><td class="num">${num(y.n_full_options)}</td><td class="num">${num(y.n_explanation)}</td><td class="num">${num(y.n_with_figure)}</td><td>${esc([y.answer_from && `逐题${y.answer_from.perQuestion}/网格${y.answer_from.grid}/字母串${y.answer_from.run}`, y.n_conflicts ? `答案冲突 ${y.n_conflicts} 处` : '', y.answer_txt_chars < 200 ? '答案卷无文字(扫描件)' : ''].filter(Boolean).join(' · '))}</td></tr>`).join('');
+  const rowsM2 = m2.years.map((y) => y.usable === false
+    ? `<tr class="bad"><td>${y.year}</td><td colspan="9">${esc(y.why)}</td></tr>`
+    : `<tr class="${y.tier === 'C' ? 'bad' : ''}"><td>${y.year}</td><td>${esc(y.tier === 'C' ? '只读原文' : y.tier + ' 档')}</td><td class="num">${num(y.n)}</td><td class="num">${num(y.declared_n)}</td><td class="num">${num(y.n_stem)}</td><td class="num">${num(y.n_answered)}</td><td class="num">${num(y.n_analysis)}</td><td class="num">${num(y.n_full_options)}/${num(y.n_choice)}</td><td class="num">${num(y.score_sum)}</td><td>${esc((y.notes || []).join('；') || '—')}</td></tr>`).join('');
+  const rowsP = pi.years.map((y) => `<tr class="${!y.ok || y.n_answer < y.n_choice ? 'bad' : ''}"><td>${y.year}</td><td class="num">${num(y.n)}</td><td class="num">${num(y.n_choice)}</td><td class="num">${num(y.n_answer)}</td><td class="num">${num(y.n_full_options)}</td><td class="num">${num(y.n_explanation)}</td><td class="num">${num(y.n_with_figure)}</td><td>${esc([y.answer_from && `主源逐题${y.answer_from.perQuestion}/主源表${y.answer_from.grid}/二源表${y.alt ? y.alt.used : 0}/二源逐题${y.alt ? y.alt.used_block : 0}/三源${y.answer_from.third || 0}`, y.alt && y.alt.stem_cmp ? `二源题干比对 ${Math.round(y.alt.stem_match * 100)}%` : '二源不可用', y.n_conflicts ? `答案冲突 ${y.n_conflicts} 处` : '', y.answer_txt_chars < 200 ? '主源答案卷无文字(扫描件)' : ''].filter(Boolean).join(' · '))}</td></tr>`).join('');
+  const thirdCal = (pi.third && pi.third.per_year || []).filter((c) => c.cmp);
   const rowsE = ei.papers.map((p) => `<tr class="${p.n_answer < p.n ? 'bad' : ''}"><td>${p.year} ${esc(p.exam_label || (p.exam === 'en1' ? '英一' : '英二'))}</td><td class="num">${p.n}</td><td class="num">${p.objective}</td><td class="num">${p.n_answer}</td><td class="num">${p.n_explanation}</td><td class="num">${num(p.score_sum)}</td><td>${esc(p.skills)}</td></tr>`).join('');
   v.innerHTML = `
   <h1 class="page">数据体检<small>缺口全部点名</small></h1>
   <p class="sub">口径：能从来源里逐字抽出来的才算「有」；抽不出来就留白并在这里点名。构建于 ${esc(mi.built_at)}。</p>
   <div class="sect-h">数学（一）· ${mi.years.length} 年</div>
   <div class="sheet"><div class="scroll-x"><table class="audit"><thead><tr><th>年份</th><th>档位</th><th>题数</th><th>声明</th><th>有题干</th><th>有答案</th><th>有解析</th><th>满4选项</th><th>分值合计</th><th>说明</th></tr></thead><tbody>${rowsM}</tbody></table></div></div>
+  <div class="sect-h">数学（二）· ${m2.years.length} 年</div>
+  <div class="sheet"><div class="scroll-x"><table class="audit"><thead><tr><th>年份</th><th>档位</th><th>题数</th><th>声明</th><th>题干</th><th>已答</th><th>解析</th><th>满4选项</th><th>分值</th><th>说明</th></tr></thead><tbody>${rowsM2}</tbody></table></div>
+    <p class="note">数二原料是「题干 + 解答」合订本（解答以「解.」起头，选择题答案写在解答里）；原料写「同试卷一第 N 题」的 ${m2.years.reduce((a, r) => a + (r.cross_refs || 0), 0)} 道题不代抄题干，只给跳转到数学一同年卷。</p></div>
   <div class="sect-h">408 · ${pi.years.length} 年</div>
   <div class="sheet"><div class="scroll-x"><table class="audit"><thead><tr><th>年份</th><th>题数</th><th>单选</th><th>有答案</th><th>满4选项</th><th>有解析</th><th>含图题</th><th>答案来源与疑点</th></tr></thead><tbody>${rowsP}</tbody></table></div>
-    <p class="note">${esc(pi.caveat)}</p></div>
+    <p class="note">${esc(pi.caveat)}</p>
+    <p class="note">${esc(pi.third ? pi.third.note : '')}。第三来源只印答案不印题干，所以不比对题干，改为拿它撞已确认的年份（撞了 ${thirdCal.map((c) => c.year).join('/')} 共 ${thirdCal.reduce((a, c) => a + c.cmp, 0)} 题，全对才允许补空）。</p></div>
   <div class="sect-h">英语 · ${ei.papers.length} 套</div>
   <div class="sheet"><div class="scroll-x"><table class="audit"><thead><tr><th>年份/卷别</th><th>题数</th><th>客观题</th><th>有答案</th><th>有解析</th><th>分值合计</th><th>题型</th></tr></thead><tbody>${rowsE}</tbody></table></div></div>
   <div class="sect-h">知识库 · ${ki.total_cards} 张</div>
@@ -244,10 +254,11 @@ route(/^audit$/, async (v) => {
   </tbody></table></div><p class="note">${esc(ki.caveat)}</p></div>
   <div class="sect-h">没做到的事（别当成已核实）</div>
   <div class="sheet md">${rich([
-    '- **数学（二）**：可达的开源文本源里只有 2024 一年，且那份 .md 其实是 PDF（前 5 字节 %PDF-1.3，仅 4 页，不像真卷），已排除不用；需要数二就得再找源或按学校科目代码走自命题路线。',
+    '- **数二共题**：当年数学二与数学一共用部分的题，原料只写「同试卷一第 N 题」，本站不代抄题干，只做跳转；带脚注的「N」指代不唯一，宁可留链接也不猜。',
     '- **2021、2022 部分题干**：转录里填空题题号被打散（`11)`、`(2)` 混排），没接上题号的题不做结构化，只做原文阅读。',
     '- **408 插图**：重排 PDF 的文字层不含图形，凡题干出现「如图/电路/树形图」等字样的题（全站共 ' + pi.totals.figures + ' 道）都要求回原卷 PDF 核对。',
-    '- **408 部分年份答案**：2019、2021、2022、2024、2025 的答案卷抽出文字为空或排版无法定位，只给原卷/答案 PDF，没有硬凑答案。',
+    '- **408 还缺答案的年份**：' + pi.years.filter((y) => y.n && y.n_answer < y.n_choice).map((y) => `${y.year}（${y.n_answer}/${y.n_choice}）`).join('、') + '。这几年的答案卷是纯扫描图，没有可核对的文字层，就不做 OCR 硬认答案（认错一个字母会静悄悄地把整卷答案带歪），只做「答案待核实」旗标 + 原卷入口。',
+    '- **408 答案卷的字母串读法已废弃**：竖排答案表按文字流读出来是 1,9,17,25,33,2…，不是 1,2,3…，实测与另一来源在 2010 年 29/40 处不一致，所以这条通道整条删掉，只保留「题号与字母成对出现」的通道。',
     '- **政治**：真题原文与押题受版权限制，本机可达源里没有，整块未做。',
     '- **考频标注**：知识卡上的「高频」是按题型惯例的人工判断，不是官方统计。',
   ].join('\n'))}</div>
@@ -256,8 +267,11 @@ route(/^audit$/, async (v) => {
     '| 内容 | 来源 | 说明 |',
     '| --- | --- | --- |',
     `| 数学（一）真题与解析 | [${esc(mi.repo.split('/').pop())}](${mi.repo}) | 第三方转录；题干/答案/解析按原样搬运 |`,
+    `| 数学（二）真题与解答 | ${esc((m2.repo || '').split('/').pop())} | 「题干 + 解答」合订转录；共题部分只给引用 |`,
     `| 英语真题结构化题库 | [${esc(ei.repo.split('/').pop())}](${ei.repo}) | 含逐题精解；数据集许可见仓库 LICENSE |`,
     `| 408 试卷与答案解析 | [${esc(pi.repo.split('/').pop())}](${pi.repo}) | MIT；重排文字版 PDF，含图题需对原卷 |`,
+    `| 408 第二来源（题干可比对） | [CodePanda66/CSPostgraduate-408](https://github.com/CodePanda66/CSPostgraduate-408) | 2009-2020 真题及答案解析；逐题比对题干 ≥80% 才采用 |`,
+    `| 408 第三来源（只补空年份） | [JDC2001/408](https://github.com/JDC2001/408) | 王道格式答案；先在 ${thirdCal.map((c) => c.year).join('/')} 年撞 ${thirdCal.reduce((a, c) => a + c.cmp, 0)} 题全对，才允许补空白 |`,
     '| 408 / 数学知识卡片 | 本地手写 | 依据 408 大纲与通行教材整理，未复制第三方讲义原文 |',
     '',
     '试卷与真题原文版权归命题机构所有，本站仅供个人备考使用。',

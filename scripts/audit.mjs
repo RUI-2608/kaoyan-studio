@@ -63,6 +63,34 @@ for (const row of mi.years.filter((r) => r.tier !== 'C')) {
 if (spot.off.length) warn('数学答案条数与原文标记数不一致：' + spot.off.join('；'));
 else good('数学：' + spot.checked + ' 个年份的答案数与原文【答案】标记数对得上');
 
+/* ---------- 1b. 数学（二）---------- */
+const m2i = readJS('math2/index.js');
+let s2 = { years: 0, q: 0, noFlag: 0, off: [], refs: 0, refNoJump: 0 };
+for (const row of m2i.years.filter((r) => r.usable !== false)) {
+  const doc = readJS('math2/' + row.year + '.js');
+  const qs = doc.sections.flatMap((s) => s.questions);
+  s2.years++; s2.q += qs.length;
+  if (!doc.sources || !doc.sources.repo) bad2('数二 ' + row.year + ' 没有来源');
+  for (const sec of doc.sections) for (const q of sec.questions) {
+    if (q.ref) { s2.refs++; if (!q.flags || !q.flags.some((f) => /共题|同试卷/.test(f))) s2.refNoJump++; }
+    if (sec.kind === 'choice' && !q.answer && !q.ref && !(q.flags || []).some((f) => /答案未|待核实|没有|缺/.test(f))) s2.noFlag++;
+  }
+  if (row.tier !== 'C') {
+    const raw = path.join(D, 'math2/raw', row.year + '.md');
+    if (fs.existsSync(raw)) {
+      const txt = fs.readFileSync(raw, 'utf8');
+      const marks = (txt.match(/【答案】|应选|故选/g) || []).length;
+      const stored = qs.filter((q) => q.answer).length + qs.filter((q) => (q.analysis || '').length > 12).length;
+      if (marks > 6 && stored < marks * 0.4) s2.off.push(row.year + ': 原文出现 ' + marks + ' 处答案字样，库里只落到 ' + stored + ' 条');
+    }
+  }
+}
+function bad2(m) { fails.push(m); }
+s2.noFlag ? bad('数二有 ' + s2.noFlag + ' 题既无答案又无「待核实」旗标') : good('数二：缺答案的题都带旗标');
+s2.refNoJump ? bad('数二有 ' + s2.refNoJump + ' 道「同试卷一」的题没挂跳转说明') : good('数二：' + s2.refs + ' 道共题引用全部写明出处');
+s2.off.length ? warn('数二答案落地率偏低：' + s2.off.join('；')) : good('数二：答案字样落地率正常');
+console.log('   数学（二）：' + s2.years + ' 年 ' + s2.q + ' 题，其中共题引用 ' + s2.refs + ' 道');
+
 /* ---------- 2. 408 答案交叉验证 ---------- */
 const pi = readJS('p408/index.js');
 let cross = { years: 0, agree: 0, disagree: 0, solo: 0 };
@@ -89,6 +117,28 @@ for (const row of pi.years.filter((y) => y.n)) {
 }
 console.log(`   408 答案交叉验证：${cross.years} 年可比对，一致 ${cross.agree}，不一致 ${cross.disagree}，${cross.solo} 年只有单一来源`);
 cross.disagree ? bad(`408 有 ${cross.disagree} 题答案与解析自相矛盾，需要人工定案`) : good('408：可比对的答案与解析结论一致');
+
+/* ---------- 2b. 408 外来答案必须过闸门，并且题上留着出处 ---------- */
+let gate = { foreign: 0, noFlag: 0, weakAlt: 0, weakThird: 0, noAnswerNoFlag: 0 };
+for (const row of pi.years.filter((y) => y.n)) {
+  const doc = readJS(`p408/${row.year}.js`);
+  /* 第二来源：题干比对不到 80% 就不许出现 alt-* 来源的答案 */
+  for (const q of doc.questions) {
+    const src = q.answer_src || '';
+    if (/^alt-/.test(src) && (row.alt.stem_match || 0) < 0.8) gate.weakAlt++;
+    if (/^third-/.test(src) && (!row.third || !row.third.channel_ok || row.third.channel_rate < 0.9)) gate.weakThird++;
+    if (/^(alt|third)-/.test(src)) {
+      gate.foreign++;
+      if (!(q.flags || []).some((f) => /第[二三]来源/.test(f))) gate.noFlag++;
+    }
+    if (q.kind === 'choice' && !q.answer && !(q.flags || []).some((f) => f.startsWith('答案待核实'))) gate.noAnswerNoFlag++;
+  }
+}
+console.log(`   408 外来答案：第二/第三来源共 ${gate.foreign} 条，题干比对不合格 ${gate.weakAlt}，通道标定不合格 ${gate.weakThird}，没留出处旗标 ${gate.noFlag}`);
+gate.weakAlt ? bad(`408 有 ${gate.weakAlt} 条答案来自题干对不上的第二来源`) : good('408：第二来源的答案都来自题干比对 ≥80% 的年份');
+gate.weakThird ? bad(`408 有 ${gate.weakThird} 条答案来自没通过标定的第三来源`) : good('408：第三来源的答案都来自标定通过的通道');
+gate.noFlag ? bad(`408 有 ${gate.noFlag} 条外来答案没在题上写明出处`) : good('408：外来答案逐题写明来源文件');
+gate.noAnswerNoFlag ? bad(`408 有 ${gate.noAnswerNoFlag} 题既无答案又无「待核实」旗标`) : good('408：没答案的题全部标了待核实');
 
 /* ---------- 3. 英语 ---------- */
 const ei = readJS('en/index.js');
@@ -134,7 +184,11 @@ function scanMath(text, where) {
 }
 for (const row of mi.years.filter((r) => r.tier !== 'C')) {
   const doc = readJS(`math/${row.year}.js`);
-  doc.sections.flatMap((s) => s.questions).forEach((q) => { scanMath(q.stem, `数学${row.year}#${q.no}`); scanMath(q.analysis, `数学${row.year}#${q.no}解析`); Object.values(q.options || {}).forEach((o) => scanMath(o, `数学${row.year}#${q.no}选项`)); });
+  doc.sections.flatMap((s) => s.questions).forEach((q) => { scanMath(q.stem, `数学一${row.year}#${q.no}`); scanMath(q.analysis, `数学一${row.year}#${q.no}解析`); Object.values(q.options || {}).forEach((o) => scanMath(o, `数学一${row.year}#${q.no}选项`)); });
+}
+for (const row of m2i.years.filter((r) => r.usable !== false && r.tier !== 'C')) {
+  const doc = readJS(`math2/${row.year}.js`);
+  doc.sections.flatMap((s) => s.questions).forEach((q) => { scanMath(q.stem, `数学二${row.year}#${q.no}`); scanMath(q.analysis, `数学二${row.year}#${q.no}解析`); Object.values(q.options || {}).forEach((o) => scanMath(o, `数学二${row.year}#${q.no}选项`)); });
 }
 for (const s of ki.subjects) readJS(`know/${s.subject}.js`).cards.forEach((c) => scanMath(c.body, `卡片${c.id}`));
 console.log(`   公式：共 ${mf.total} 处，渲染失败 ${mf.fail} 处`);

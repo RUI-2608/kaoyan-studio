@@ -43,7 +43,7 @@ function revealHTML(q, kind) {
   if (!hasAns && !exp) return `<div class="reveal"><span class="lab">答案</span><div class="ans">待核实 —— 本条数据的来源里没给出答案，请对原卷</div></div>`;
   let out = '<div class="reveal">';
   if (hasAns) {
-    const src = q.answer_src ? ` <span class="note">（来源：${({ 'per-question': '逐题标记', grid: '卷首答案表', 'letter-run': '卷首字母串' })[q.answer_src] || q.answer_src}）</span>` : '';
+    const src = q.answer_src ? ` <span class="note">（来源：${ANS_SRC_LABEL[q.answer_src] || q.answer_src}）</span>` : '';
     out += `<span class="lab">答案</span><div class="ans">${esc(String(q.answer))}${src}</div>`;
   }
   if (exp) out += `<div class="expl md">${rich(exp)}</div>`;
@@ -103,7 +103,7 @@ function stats() {
   return { done, right, rate: done ? Math.round((right / done) * 100) : null, star: Object.keys(S.star).length, wrong: Object.keys(S.wrong || {}).length, read: Object.keys(S.seen).length };
 }
 route(/^$/, async (v) => {
-  const [mi, ei, pi, ki] = await Promise.all([M.mathIdx(), M.enIdx(), M.pIdx(), M.kIdx()]);
+  const [mi, m2, ei, pi, ki] = await Promise.all([M.mathIdx(), M.m2Idx(), M.enIdx(), M.pIdx(), M.kIdx()]);
   const st = stats();
   const mathOk = mi.years.filter((y) => y.tier !== 'C');
   const pOk = pi.years.filter((y) => y.ok);
@@ -115,6 +115,7 @@ route(/^$/, async (v) => {
   <div class="grid" id="tiles">
     <a class="tile" href="#/math"><div class="yr">数学（一）</div><div class="meta">${mi.totals.years} 个年份 · ${mathOk.length} 年可整卷刷 · ${mi.totals.questions} 题</div><div class="meta">题干 ${mi.totals.with_stem} · 答案 ${mi.totals.with_answer} · 解析 ${mi.totals.with_analysis}</div></a>
     <a class="tile" href="#/p408"><div class="yr">408 计算机</div><div class="meta">${pOk.length} 年真题 · ${pi.totals.questions} 题（单选 ${pi.totals.choice} / 综合 ${pi.totals.essay}）</div><div class="meta">答案 ${pi.totals.with_answer} · 解析 ${pi.totals.with_explanation} · 含图题 ${pi.totals.figures}</div></a>
+    <a class="tile" href="#/math2"><div class="yr">数学（二）</div><div class="meta">${m2.totals.years} 个年份 · ${m2.years.filter((y) => y.usable !== false && y.tier !== 'C').length} 年可整卷刷 · ${m2.totals.questions} 题</div><div class="meta">解析 ${m2.totals.with_analysis} · 与数一共题 ${m2.years.reduce((a, r) => a + (r.cross_refs || 0), 0)} 道</div></a>
     <a class="tile" href="#/know"><div class="yr">知识库</div><div class="meta">${ki.subjects.length} 科 · ${ki.total_cards} 张卡片 · ${ki.subjects.reduce((a, s) => a + s.chars, 0).toLocaleString()} 字</div><div class="meta">${ki.subjects.map((s) => esc(s.label.split('（')[0])).join(' / ')}</div></a>
     <a class="tile" href="#/en"><div class="yr">英语（一/二）</div><div class="meta">${enOk.length} 套 · ${ei.totals.questions} 题</div><div class="meta">解析覆盖 ${pct(ei.totals.with_explanation, ei.totals.questions)}</div></a>
     <a class="tile" href="#/marks"><div class="yr">收藏与错题</div><div class="meta">★ ${st.star} 条收藏 · ✗ ${st.wrong} 道错题</div><div class="meta">支持重做与笔记</div></a>
@@ -140,84 +141,94 @@ route(/^$/, async (v) => {
     <p class="note" style="margin-bottom:0">全站共 ${cards} 个年份/科目存在已知缺口，逐条见「数据体检」。</p>
   </div>`;
 });
+/* ================= 数学（一 / 二） ================= */
+const MATH = {
+  math1: { idx: () => M.mathIdx(), doc: (y) => M.math(y), raw: (y, k) => M.mathRaw(y, k), label: '数学（一）', dir: 'math', key: 'math1', pfx: '' },
+  math2: { idx: () => M.m2Idx(), doc: (y) => M.m2(y), raw: (y) => M.m2Raw(y), label: '数学（二）', dir: 'math2', key: 'math2', pfx: 'm2-' },
+};
 
-/* ================= 数学 ================= */
-route(/^math$/, async (v) => {
-  const idx = await M.mathIdx();
-  const A = idx.years.filter((y) => y.tier === 'A'), B = idx.years.filter((y) => y.tier === 'B'), C = idx.years.filter((y) => y.tier === 'C');
+function mathListBody(doc, m) {
+  const idx = doc;
+  const A = idx.years.filter((y) => y.tier === 'A'), B = idx.years.filter((y) => y.tier === 'B'), C = idx.years.filter((y) => y.tier === 'C' && y.usable !== false);
+  const skipped = idx.years.filter((y) => y.usable === false);
   const tile = (y) => {
-    const st = S.sess['math:' + y.year];
-    const done = idx && y.n ? Math.round(Object.keys(S.ans).filter((k) => k.startsWith(y.year + '-') || k.startsWith('math' + y.year)).length / y.n * 100) : 0;
-    return `<a class="tile ${y.tier === 'C' ? 'raw' : ''}" href="#/math/${y.year}">
+    const st = S.sess[`${m.key}:${y.year}`];
+    return `<a class="tile ${y.tier === 'C' ? 'raw' : ''}" href="#/${m.dir}/${y.year}">
       <div class="yr">${y.year}</div>
-      <div class="meta">${y.tier === 'C' ? '只给原文阅读' : `${y.n} 题 · 答案 ${y.n_answered}/${y.n}`}</div>
-      <div class="meta">${(y.notes || []).length ? esc((y.notes || [])[0]) : (y.tier === 'C' ? '题号与转录对不齐，见体检页' : `${y.n_choice} 道客观题 · 解析 ${y.n_analysis} 题`)}${(y.notes || []).length > 1 ? ` 等 ${(y.notes || []).length} 项` : ''}</div>
+      <div class="meta">${y.tier === 'C' ? '只给原文阅读' : `${y.n} 题 · 答案/解析 ${y.n_answered}/${y.n}`}</div>
+      <div class="meta">${(y.notes || []).length ? esc((y.notes || [])[0]) : (y.tier === 'C' ? '转录对不齐，见体检页' : `${y.n_choice} 道客观题 · 解析 ${y.n_analysis} 题`)}${(y.notes || []).length > 1 ? ` 等 ${(y.notes || []).length} 项` : ''}</div>
       ${st ? `<div class="meta">上次：${esc(st.open)} · 用 ${fmtDur(st.used)}</div>` : ''}
       <span class="badges">${y.tier === 'A' ? chip('齐', 'ok') : y.tier === 'B' ? chip('部分缺答', 'gold') : chip('原文', 'dim')}</span>
     </a>`;
   };
-  v.innerHTML = `
-  <h1 class="page">数学（一）历年真题<small>1987-2025</small></h1>
+  return `
+  <div class="row" style="margin-bottom:10px">
+    <h1 class="page" style="margin:0">${m.label}历年真题<small>1987 起</small></h1>
+    <span class="spacer"></span>
+    <a class="btn sm ${m.key === 'math1' ? 'primary' : 'ghost'}" href="#/math">数学（一）</a>
+    <a class="btn sm ${m.key === 'math2' ? 'primary' : 'ghost'}" href="#/math2">数学（二）</a>
+  </div>
   <p class="sub">来源：${esc(idx.repo)}。题干、选项、答案、解析按原样搬运；<b>认不出的题号一律不猜</b>，所以 C 档年份只做原文阅读。</p>
+  ${m.key === 'math2' ? `<div class="sheet dark md" style="margin-bottom:12px">${rich('数二这份原料是「题干 + 解答」排在同一页的合订本：解答以「解.」起头，选择题的答案写在解答里（「应选 (B)」）。另有 ' + idx.years.reduce((a, r) => a + (r.cross_refs || 0), 0) + ' 道题原料只写了「同试卷一第 N 题」—— 那是当年数二与数学一共题，题里给了跳转到数学一同年卷的链接，本站不代抄题干，避免张冠李戴。')}</div>` : ''}
   <div class="sect-h">A 档 · 题目与答案齐全（${A.length} 年）</div><div class="grid">${A.map(tile).join('')}</div>
   <div class="sect-h">B 档 · 可刷，个别题缺答案（${B.length} 年）</div><div class="grid">${B.map(tile).join('')}</div>
   <div class="sect-h">C 档 · 转录对不齐，只提供原文（${C.length} 年）</div><div class="grid">${C.map(tile).join('')}</div>
-  <p class="note">缺口口径与逐年明细在「数据体检」页；数学（二）目前只有 2024 一份且是 PDF 冒充 .md，已排除，见体检页说明。</p>`;
-});
+  ${skipped.length ? `<div class="sect-h">这一年不能用的原因</div><div class="sheet dark">${skipped.map((y) => `<div class="row"><b>${y.year}</b><span class="note">${esc(y.why)}</span></div>`).join('')}</div>` : ''}`;
+}
 
-route(/^math\/(\d{4})$/, async (v, [y]) => {
-  const year = +y;
-  const idx = await M.mathIdx();
+route(/^math$/, async (v) => { v.innerHTML = mathListBody(await M.mathIdx(), MATH.math1); });
+route(/^math2$/, async (v) => { v.innerHTML = mathListBody(await M.m2Idx(), MATH.math2); });
+
+async function mathPaperView(v, mk, y) {
+  const m = MATH[mk]; const year = +y;
+  const idx = await m.idx();
   const meta = idx.years.find((r) => r.year === year);
-  if (meta && meta.tier === 'C') return mathRawView(v, year, meta, idx);
-  const doc = await M.math(year);
-  const key = 'math:' + year;
+  if (!meta || meta.usable === false) { v.innerHTML = `<div class="sheet"><h3>${year} 年这份卷子没建进题库</h3><p class="note">${esc((meta && meta.why) || '仓库里没有这一年的文本')}</p><a class="btn" href="#/${m.dir}">‹ 回列表</a></div>`; return; }
+  if (meta.tier === 'C') return mathRawView(v, year, meta, idx, m);
+  const doc = await m.doc(year);
+  const key = `${m.key}:${year}`;
   const s = sess(key);
-  const qs = doc.sections.flatMap((sec, i) => sec.questions.map((q) => ({ ...q, id: `${year}-${i + 1}-${q.local_no}`, section: sec.cn, section_title: sec.title, kind: sec.kind })));
-  const answerable = qs.filter((q) => !q.options || Object.keys(q.options).length >= 3);
+  const qs = doc.sections.flatMap((sec, i) => sec.questions.map((q) => ({ ...q, id: m.pfx + year + '-' + (i + 1) + '-' + q.local_no, section: sec.cn })));
+  const answerable = qs.filter((q) => q.options && Object.keys(q.options).length >= 3);
   v.innerHTML = `
   <div class="row" style="margin-bottom:10px">
-    <a class="btn ghost sm" href="#/math">‹ 回数学列表</a>
-    <h1 class="page" style="margin:0">${year} 年数学（一）<small>${doc.audit.n} 题 · 分值合计 ${num(doc.audit.score_sum)}</small></h1>
+    <a class="btn ghost sm" href="#/${m.dir}">‹ 回${m.label}列表</a>
+    <h1 class="page" style="margin:0">${year} 年${m.label}<small>${doc.audit.n} 题 · 分值合计 ${num(doc.audit.score_sum)}</small></h1>
     <span class="spacer"></span>
     <div class="modes" data-modes="${key}">
       <button data-mode="recite" class="${s.mode === 'recite' ? 'on' : ''}">背题</button>
       <button data-mode="exam" class="${s.mode === 'exam' ? 'on' : ''}">考试</button>
     </div>
     <button class="btn sm" data-act="print">打印 / 存 PDF</button>
-    <button class="btn sm ghost" data-raw="${year}">看转录原文</button>
+    <button class="btn sm ghost" data-raw="${m.dir}/${year}">看转录原文</button>
   </div>
-  ${(meta && meta.notes || []).length ? `<div class="sheet dark md" style="margin-bottom:12px">${rich('本页数据说明：\n' + meta.notes.map((n) => '- ' + n).join('\n'))}</div>` : ''}
+  ${(meta.notes || []).length ? `<div class="sheet dark md" style="margin-bottom:12px">${rich('本页数据说明：\n' + meta.notes.map((n) => '- ' + n).join('\n'))}</div>` : ''}
   ${timerHTML(key)}
   <div class="sheet">
-    <div class="paper-head"><h2>${year} 年全国硕士研究生招生考试 · 数学（一）</h2>
-      <span class="spacer"></span><span class="note">来源：${esc(doc.sources.paper || '')} + ${esc(doc.sources.solution || '')}</span></div>
+    <div class="paper-head"><h2>${year} 年全国硕士研究生招生考试 · ${m.label}</h2>
+      <span class="spacer"></span><span class="note">来源：${esc((doc.sources || {}).paper || '')}${(doc.sources || {}).solution && doc.sources.solution !== doc.sources.paper ? ' + ' + esc(doc.sources.solution) : ''}</span></div>
     <div class="row"><span class="chip dim">${answerable.length} 道客观题</span><span class="chip dim">${qs.length - answerable.length} 道解答/综合题</span>
+      ${qs.some((q) => q.ref) ? `<span class="chip gold">${qs.filter((q) => q.ref).length} 道与数学一共题</span>` : ''}
       <span class="spacer"></span><button class="btn primary sm" data-submit="${key}" ${s.mode === 'exam' ? '' : 'disabled'}>提交整卷判分</button></div>
     <div id="scorebox"></div>
     <hr class="rule">
     ${doc.sections.map((sec, i) => `<div class="sect-h" style="color:#7a5f21;font-size:1em;margin-top:18px">${esc(sec.cn || '')}、${esc(sec.title || '')}</div>
-      ${sec.questions.map((q, j) => qcard({ ...q, id: `${year}-${i + 1}-${q.local_no}`, section: sec.cn }, j, sec.kind === 'solution' ? 'essay' : 'math', key)).join('')}`).join('')}
-  </div>
-  ${timerFoot(key)}`;
-  paintScore(key, qs, 'math');
-});
-
-function timerFoot(key) {
-  return `<div class="row" style="margin-top:10px"><span class="note">翻页：平板上直接左右滑动列表或用系统返回；本页进度已自动保存。</span></div>`;
+      ${sec.questions.map((q, j) => qcard({ ...q, id: m.pfx + `${year}-${i + 1}-${q.local_no}`, section: sec.cn }, j, sec.kind === 'solution' ? 'essay' : 'math', key)).join('')}`).join('')}
+  </div>`;
+  paintScore(key, qs, m.key);
 }
+route(/^math\/(\d{4})$/, (v, [y]) => mathPaperView(v, 'math1', y));
+route(/^math2\/(\d{4})$/, (v, [y]) => mathPaperView(v, 'math2', y));
 
-async function mathRawView(v, year, meta, idx) {
-  const [paper, sol] = await Promise.all([
-    M.mathRaw(year, 'paper').catch(() => null),
-    M.mathRaw(year, 'solution').catch(() => null),
-  ]);
-  const body = (o) => (o && o.text ? `<div class="sheet md">${rich(o.text)}</div>` : '<div class="sheet"><p class="note">这一年没有留下原文文件。</p></div>');
+async function mathRawView(v, year, meta, idx, m) {
+  m = m || MATH.math1;
+  const parts = [m.key === 'math2' ? m.raw(year) : m.raw(year, 'paper'), m.key === 'math2' ? null : m.raw(year, 'solution')];
+  const got = await Promise.all(parts.map((p) => (p ? p.catch(() => null) : null)));
+  const body = (o, title) => (o && o.text ? `<div class="sect-h">${esc(title)}</div><div class="sheet md">${rich(o.text)}</div>` : '');
   v.innerHTML = `
-  <div class="row" style="margin-bottom:10px"><a class="btn ghost sm" href="#/math">‹ 回数学列表</a>
-    <h1 class="page" style="margin:0">${year} 年数学（一）· 原文<small>只做阅读</small></h1></div>
+  <div class="row" style="margin-bottom:10px"><a class="btn ghost sm" href="#/${m.dir}">‹ 回${m.label}列表</a>
+    <h1 class="page" style="margin:0">${year} 年${m.label}· 原文<small>只做阅读</small></h1></div>
   <div class="sheet dark md" style="margin-bottom:12px">${rich((meta.notes || []).length ? meta.notes.map((n) => '- ' + n).join('\n') : '这一年的题号在转录里对不齐，没有结构化成题库；下面是来源仓库里的原始文本。')}
-    <p class="note" style="margin-bottom:0">来源：${esc(idx.repo)}。公式若渲染失败会保留原始 LaTeX 并以红色下标出。</p></div>
-  <div class="sect-h">试卷原文</div>${body(paper)}
-  <div class="sect-h">解析原文</div>${body(sol)}`;
+    <p class="note" style="margin-bottom:0">来源：${esc(idx.repo)}。公式若渲染失败会保留原始 LaTeX 并标红。</p></div>
+  ${body(got[0], m.key === 'math2' ? '真题与解答原文（合订本里这一年的全部文字）' : '试卷原文')}${body(got[1], '解析原文')}`;
 }

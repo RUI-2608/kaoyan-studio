@@ -13,6 +13,13 @@ window.addEventListener('unhandledrejection', (e) => window.__errs.push('Promise
 /* ================= 工具 ================= */
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+/* 答案是从哪一条通道来的，页面上说人话；「字母串」这条已经废弃，留着映射只为老数据可读 */
+const ANS_SRC_LABEL = {
+  'per-question': '本卷答案卷逐题标记', grid: '本卷答案卷卷首表', 'letter-run': '卷首字母串（已废弃）',
+  'alt-grid': '第二来源答案表', 'alt-block': '第二来源逐题解析',
+  'third-grid': '第三来源答案表', 'third-block': '第三来源逐题解析',
+  solution: '解析正文', merged: '题干卷与解析卷合并', 'answer-key': '答案卷',
+};
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const num = (n) => (n == null || n === '' ? '—' : String(n));
 const pad2 = (n) => String(n).padStart(2, '0');
@@ -47,6 +54,9 @@ const M = {
   mathIdx: () => loadMod('math/index', 'data/math/index.js'),
   math: (y) => loadMod('math/' + y, `data/math/${y}.js`),
   mathRaw: (y, kind) => loadMod(`mathraw/${y}-${kind}`, `data/math/raw/${y}-${kind}.js`),
+  m2Idx: () => loadMod('math2/index', 'data/math2/index.js'),
+  m2: (y) => loadMod(`math2/${y}`, `data/math2/${y}.js`),
+  m2Raw: (y) => loadMod(`math2raw/${y}`, `data/math2/raw/${y}.js`),
   enIdx: () => loadMod('en/index', 'data/en/index.js'),
   en: (exam, y) => loadMod(`en/${exam}-${y}`, `data/en/${exam}-${y}.js`),
   pIdx: () => loadMod('p408/index', 'data/p408/index.js'),
