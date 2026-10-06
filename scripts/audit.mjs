@@ -140,6 +140,32 @@ gate.weakThird ? bad(`408 有 ${gate.weakThird} 条答案来自没通过标定�
 gate.noFlag ? bad(`408 有 ${gate.noFlag} 条外来答案没在题上写明出处`) : good('408：外来答案逐题写明来源文件');
 gate.noAnswerNoFlag ? bad(`408 有 ${gate.noAnswerNoFlag} 题既无答案又无「待核实」旗标`) : good('408：没答案的题全部标了待核实');
 
+/* ---------- 2c. 408 选项完整性 ----------
+   选项被吞这件事，光靠「缺答案要挂旗标」那类不变量看不出来：2022 年第 1 题的 A 被粘在题干行尾，
+   题面照样能显示，只是少一项，做的时候根本发现不了。所以这里专门盯两件事：
+   1) 单选满 4 选项的比例（原料里确实有含图题没有文字选项，所以是 warn 不是 fail）；
+   2) 题干里还留着「B. / C. / D.」这种没拆开的选项标记 —— 这是解析器该修的信号。 */
+let opt = { tot: 0, full: 0, short: [], inline: [] };
+for (const row of pi.years.filter((y) => y.n)) {
+  const doc = readJS(`p408/${row.year}.js`);
+  for (const q of doc.questions) {
+    if (q.kind !== 'choice') continue;
+    opt.tot++;
+    const n = Object.keys(q.options || {}).length;
+    if (n === 4) opt.full++;
+    else opt.short.push(`${row.year}#${q.no}(${n})`);
+    const m = /[\s。；;][BCD]\s*[.．]\s*\S/.exec(String(q.stem || ''));
+    if (m) opt.inline.push(`${row.year}#${q.no}「…${String(q.stem).slice(Math.max(0, m.index - 8), m.index + 22).trim()}…」`);
+  }
+}
+const optRate = opt.full / Math.max(1, opt.tot);
+console.log(`   408 选项完整性：单选 ${opt.tot} 道，满 4 选项 ${opt.full}（${(optRate * 100).toFixed(1)}%），不满 ${opt.short.length} 道，题干里疑似未拆开 ${opt.inline.length} 处`);
+if (optRate >= 0.95) good(`408：单选满 4 选项率 ${(optRate * 100).toFixed(1)}%（≥95%）`);
+else bad(`408：单选满 4 选项率只有 ${(optRate * 100).toFixed(1)}%，选项解析可能出了问题`);
+if (opt.short.length) warn(`408 选项不足 4 个的题：${opt.short.join('、')}（含图题文字层本来就没有选项，逐题已挂旗标）`);
+if (opt.inline.length) warn(`408 题干里还留着没拆开的选项标记：${opt.inline.join('；')} —— 这批是原料把上一题的选项漂到了下一题题干里，需要人工对原卷`);
+else good('408：题干里没有未拆开的选项标记');
+
 /* ---------- 3. 英语 ---------- */
 const ei = readJS('en/index.js');
 let enQ = 0, enNoAns = 0, enNoExp = 0;

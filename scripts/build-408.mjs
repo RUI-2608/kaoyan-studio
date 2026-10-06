@@ -74,6 +74,26 @@ function parsePaper(txt) {
   function feed(text) {
     let buf = String(text || '').trim();
     if (!buf || !cur || cur.kind !== 'choice') return false;
+    /* 两栏排版的兜底：一行里同时出现 ≥2 个「字母.」标记（2015 年第 40 题
+       「A. 该浏览器请求浏览 index.html C. 该浏览器请求使用持续连接」，下一行才是 B、D）。
+       只有标记数 ≥2 且这些字母本题都还没用过才切 —— 单标记的行不切，
+       因为「… IV. I/O 设备利用率高 D. 仅 I、III、IV」这种是上一题的选项漂到了下一题题干里，
+       切了就是把别人的答案安到这题上。 */
+    const marks = [...buf.matchAll(/(?:^|[\s;；。])([A-D])\s*[.．]\s*/g)];
+    const uniq = [...new Set(marks.map((m) => m[1]))];
+    if (marks.length >= 2 && uniq.length >= 2 && uniq.every((L) => !cur.options[L] || !cur.options[L].length)) {
+      const head = buf.slice(0, marks[0].index).trim();
+      if (head) push(head);
+      for (let k = 0; k < marks.length; k++) {
+        const start = marks[k].index + marks[k][0].length;
+        const end = k + 1 < marks.length ? marks[k + 1].index : buf.length;
+        const v = buf.slice(start, end).trim();
+        cur.options[marks[k][1]] = cur.options[marks[k][1]] || [];
+        if (v) cur.options[marks[k][1]].push(v);
+      }
+      mode = 'option'; optKey = marks[marks.length - 1][1];
+      return true;
+    }
     const want0 = wantLetter();
     if (!want0) return false;
     const re = (L) => new RegExp('(?:^|[\\s;；。])(' + L + ')\\s*[.．]\\s*');
