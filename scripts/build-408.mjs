@@ -42,6 +42,11 @@ function guessSubject(text) {
 
 const FIG_RE = /如题?\s?\d*\s?图|如图|下图|上图|所示的图|示意图|流程图如下|逻辑电路|波形图|电路图|拓扑结构如图|树形图|如下左图|如下右图/;
 
+/* 每页页眉/页脚「20XX 年全国硕士研究生…第 2 页（共 11 页）」会被文字层混进题干或选项里
+   （每年 11~13 处），整段抹掉再解析 —— 它不是题目内容。 */
+const FOOTER_RE = /\d{4}\s*年全国硕士研究生[^0-9]{0,90}?第\s*\d+\s*页[^0-9]{0,4}共\s*\d+\s*页[）)]?/g;
+const stripFooter = (t) => t.replace(FOOTER_RE, ' ');
+
 function sectionOf(line) {
   const m = line.match(/^([一二三四五六])\s*[、.．]\s*(.{0,30})/);
   if (!m) return null;
@@ -50,29 +55,89 @@ function sectionOf(line) {
 }
 
 /* ---------- 试卷 ---------- */
+/* 重排 PDF 的文字层里有三种「挤在一行」的排版要拆开：
+   1) 选项粘在题干行尾 —— 2022 年第 1 题「sum++; A. O(log n)」，不拆就整题只剩 3 个选项；
+   2) 四个选项挤在同一行 —— 2015 年第 37 题；
+   3) 选项行末尾直接跟着下一题的题号 —— 同一行「… D. 以太网交换机可… 38.某路由器的路由表如下表所示。」。
+   切选项只认「下一个该出现的字母」，而且分隔符限定为 . 或 ．：
+   题干里「某系统中有 A、B 两类资源」「站点 A、B、C 通过 CDMA」这种枚举如果也认，
+   就会把题干腰斩成选项（第一版就踩了这个，2014/2020 两年被切坏）。 */
+const NEXT_OPT = { A: 'B', B: 'C', C: 'D', D: null };
+
 function parsePaper(txt) {
   const lines = txt.replace(/\r/g, '').split('\n').map((l) => l.replace(/\s+$/, ''));
   const qs = new Map();
   let cur = null, sec = null, mode = 'stem', optKey = null;
   const push = (t) => { if (!cur) return; if (mode === 'stem') cur.stem.push(t); else if (mode === 'option' && optKey) cur.options[optKey].push(t); };
-  for (let i = 0; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line) continue;
+  const wantLetter = () => (mode === 'option' && optKey ? NEXT_OPT[optKey] : 'A');
+
+  function feed(text) {
+    let buf = String(text || '').trim();
+    if (!buf || !cur || cur.kind !== 'choice') return false;
+    const want0 = wantLetter();
+    if (!want0) return false;
+    const re = (L) => new RegExp('(?:^|[\\s;；。])(' + L + ')\\s*[.．]\\s*');
+    const m0 = re(want0).exec(buf);
+    if (!m0) return false;
+    const head = buf.slice(0, m0.index).trim();
+    let rest = buf.slice(m0.index + m0[0].length).trim();
+    if (!rest) return false;
+    /* 先把「哪个字母 → 哪段文字」切清楚，再一次性落地；
+       边切边写会把上一选项的整段又当成下一选项的前缀重复一遍（第一版就重复了） */
+    const parts = [[want0, '']];
+    let curL = want0;
+    while (NEXT_OPT[curL]) {
+      const nx = NEXT_OPT[curL];
+      const mm = re(nx).exec(rest);
+      if (!mm) break;
+      const before = rest.slice(0, mm.index).trim();
+      const after = rest.slice(mm.index + mm[0].length).trim();
+      if (!after) break;
+      parts[parts.length - 1][1] = before;
+      parts.push([nx, '']);
+      rest = after; curL = nx;
+    }
+    parts[parts.length - 1][1] = rest;
+    if (head) push(head);
+    for (const [L, v] of parts) {
+      cur.options[L] = cur.options[L] || [];
+      if (v) cur.options[L].push(v);
+    }
+    mode = 'option'; optKey = curL;
+    return true;
+  }
+
+  function handle(line) {
     const s = sectionOf(line);
-    if (s && /题/.test(s.title)) { sec = s; mode = 'stem'; continue; }
-    let m = line.match(/^(\d{1,2})\s*[.、．]\s*(.*)$/);
+    if (s && /题/.test(s.title)) { sec = s; mode = 'stem'; return; }
+    const m = line.match(/^(\d{1,2})\s*[.、．]\s*(.*)$/);
     if (m && +m[1] >= 1 && +m[1] <= 60) {
       const no = +m[1];
       if (!cur || no === (cur.no || 0) + 1 || !qs.has(no)) {
         cur = { no, section: sec ? sec.cn : null, kind: sec ? sec.kind : (no <= 40 ? 'choice' : 'essay'), stem: [], options: {}, answer: null, explanation: '' };
         qs.set(no, cur); mode = 'stem';
-        if (m[2]) push(m[2]);
-        continue;
+        if (m[2] && !feed(m[2])) push(m[2]);
+        return;
       }
     }
-    m = line.match(/^([A-D])\s*[.、．]\s*(.*)$/);
-    if (m && cur && cur.kind === 'choice') { mode = 'option'; optKey = m[1]; (cur.options[m[1]] = cur.options[m[1]] || []).push(m[2]); continue; }
+    if (feed(line)) return;
+    const o = line.match(/^([A-D])\s*[.、．]\s*(.*)$/);
+    if (o && cur && cur.kind === 'choice') { mode = 'option'; optKey = o[1]; (cur.options[o[1]] = cur.options[o[1]] || []).push(o[2]); return; }
     push(line);
+  }
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line) continue;
+    let rest = line;
+    for (let g = 0; g < 3; g++) {
+      const nxt = cur ? cur.no + 1 : null;
+      const cut = nxt != null && nxt <= 60 ? new RegExp('[\\s;；。]' + nxt + '\\s*[.、．]\\s*(?=[\\u4e00-\\u9fff(（])').exec(rest) : null;
+      if (!cut) { handle(rest); break; }
+      handle(rest.slice(0, cut.index + 1).trim());
+      rest = rest.slice(cut.index + 1).trim();
+      if (!rest) break;
+    }
   }
   return [...qs.values()].sort((a, b) => a.no - b.no);
 }
@@ -91,8 +156,11 @@ for (const year of years) {
   const paperFile = path.join(VENDOR, `papers-rebuild/${year}.pdf`);
   const ansFile = path.join(VENDOR, `answers/${year}-answer.pdf`);
   if (!fs.existsSync(paperFile)) { rows.push({ year, usable: false, why: '仓库里没有这一年的试卷 PDF' }); continue; }
-  const pTxt = pdfText(paperFile);
-  const aTxt = fs.existsSync(ansFile) ? pdfText(ansFile) : '';
+  const rawP = pdfText(paperFile);
+  const rawA = fs.existsSync(ansFile) ? pdfText(ansFile) : '';
+  const footers = (rawP.match(FOOTER_RE) || []).length + (rawA.match(FOOTER_RE) || []).length;
+  const pTxt = stripFooter(rawP);
+  const aTxt = stripFooter(rawA);
   if (pTxt.replace(/\s/g, '').length < 3000) { rows.push({ year, usable: false, why: '抽出文字过少，可能这一年是扫描图' }); continue; }
   for (const [src, name] of [[paperFile, `${year}-试卷.pdf`], [ansFile, `${year}-答案解析.pdf`]]) {
     if (fs.existsSync(src)) fs.copyFileSync(src, path.join(PDF, name));
@@ -181,7 +249,7 @@ for (const year of years) {
       used_block: questions.filter((q) => q.answer_src === 'alt-block').length,
       ex_used: questions.filter((q) => (q.flags || []).includes('解析取自第二来源')).length,
     },
-    chars: pTxt.length, ok: choice.length >= 38 && essay.length >= 5,
+    chars: pTxt.length, footers_stripped: footers, ok: choice.length >= 38 && essay.length >= 5,
   };
   built.push({
     year, questions, audit, rows_note: { altWhy, gridWhy },

@@ -42,6 +42,7 @@ const SCENES = [
   { name: 'p408-list-1024', hash: '#/p408', size: [1024, 768] },
   { name: 'p408-paper-1024', hash: '#/p408/2023', size: [1024, 768], scroll: 520 },
   { name: 'p408-prov-1024', hash: '#/p408/2022', size: [1024, 768], clickText: '背题', scroll: 700 },
+  { name: 'p408-2022top-1024', hash: '#/p408/2022', size: [1024, 768], clickText: '背题', scroll: 300 },
   { name: 'p408-filter-1024', hash: '#/p408/2023', size: [1024, 768], click: 'button[data-subj="计算机网络"]' },
   { name: 'know-1024', hash: '#/know', size: [1024, 768] },
   { name: 'know-co-1024', hash: '#/know/co', size: [1024, 768] },
