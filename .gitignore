@@ -3,4 +3,5 @@ _vendor/
 .tmp/
 .shots/
 *.qoder.site
-DS_Store
+.DS_Store
+dist/

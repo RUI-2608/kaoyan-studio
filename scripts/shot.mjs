@@ -39,6 +39,8 @@ const SCENES = [
   { name: 'math-paper-opts', hash: '#/math/2015', size: [1024, 768], click: '.opt' },
   { name: 'math-exam-1024', hash: '#/math/2015', size: [1024, 768], clickText: '考试' },
   { name: 'math-raw-1024', hash: '#/math/2001', size: [1024, 768] },
+  /* 2022 那份试卷转录是坏的（garbled_paper），原文页必须把这句话印在乱码上面 */
+  { name: 'math-raw-garbled-1024', hash: '#/math/2022', size: [1024, 768], clickText: '看转录原文', wait: 2600 },
   { name: 'p408-list-1024', hash: '#/p408', size: [1024, 768] },
   { name: 'p408-paper-1024', hash: '#/p408/2023', size: [1024, 768], scroll: 520 },
   { name: 'p408-prov-1024', hash: '#/p408/2022', size: [1024, 768], clickText: '背题', scroll: 700 },

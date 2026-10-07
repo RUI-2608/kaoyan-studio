@@ -166,6 +166,35 @@ if (opt.short.length) warn(`408 选项不足 4 个的题：${opt.short.join('、
 if (opt.inline.length) warn(`408 题干里还留着没拆开的选项标记：${opt.inline.join('；')} —— 这批是原料把上一题的选项漂到了下一题题干里，需要人工对原卷`);
 else good('408：题干里没有未拆开的选项标记');
 
+/* ---------- 2d. 源 PDF 抽出来的乱码符号 ----------
+   有些转录件的文字层是坏的：符号（≥ ≤ ≪ ←）退化成 U+FFFD，整页甚至可能全是乱码。
+   build-math 用 U+FFFD 占比 >0.15% 判「这份不能用」，改成从解析取题干，并在 notes 里点名。
+   这里复查两件事：
+   1) 出现大量 U+FFFD 的那一份原文，索引里必须已经标了 garbled_*，否则就是漏检 —— fail；
+   2) 408 的解析里有少量符号乱码（源 PDF 就这样，恢复不出原字符），只 warn 并给出数量。 */
+const fffd = {};
+const scanFile = (p) => (fs.existsSync(p) ? (fs.readFileSync(p, 'utf8').match(/\uFFFD/g) || []).length : 0);
+const add = (k, n) => { if (n) fffd[k] = (fffd[k] || 0) + n; };
+let fffdMiss = 0;
+for (const row of mi.years) {                       /* 数一：试卷 / 解析两份分开，坏的那份必须由索引点名 */
+  for (const kind of ['paper', 'solution']) {
+    const n = scanFile(path.join(D, 'math', 'raw', `${row.year}-${kind}.js`));
+    add(`math/${kind}`, n);
+    if (n > 40 && !(kind === 'paper' ? row.garbled_paper : row.garbled_solution)) {
+      fffdMiss++; bad(`math ${row.year} ${kind} 原文里有 ${n} 处 U+FFFD，索引却没标 garbled_${kind} —— 这份乱码没被认出来，可能已经混进题库`);
+    }
+  }
+}
+for (const row of m2i.years) {                      /* 数二是合订本，没有乱码兜底这条路，出现大量 U+FFFD 就是新伤 */
+  const n = scanFile(path.join(D, 'math2', 'raw', `${row.year}.js`));
+  add('math2/raw', n);
+  if (n > 40) { fffdMiss++; bad(`math2 ${row.year} 原文有 ${n} 处 U+FFFD，数二这条链路没有乱码处理，得人工看这份转录还能不能用`); }
+}
+fffd.p408 = pi.years.filter((y) => y.n).reduce((a, y) => a + scanFile(path.join(D, 'p408', `${y.year}.js`)), 0);
+console.log(`   乱码符号 U+FFFD：${Object.entries(fffd).map(([s, n]) => `${s} ${n}`).join('，') || '全库 0'}`);
+if (!fffdMiss) good('大量乱码的原文都已在索引里标为 garbled（没有漏检）');
+if (fffd.p408) warn(`408 数据里有 ${fffd.p408} 处 U+FFFD：源答案 PDF 的数学符号转文字时丢了，恢复不出原字符，只影响个别解析里的符号（题干与选项不受影响）`);
+
 /* ---------- 3. 英语 ---------- */
 const ei = readJS('en/index.js');
 let enQ = 0, enNoAns = 0, enNoExp = 0;
