@@ -66,9 +66,10 @@ python scripts/pack_share.py 1.3 --lite   # 轻量：dist/考研备考台-lite-v
 78 MB 的目录不会一次性压到首屏上。
 
 ### 7. 线上版（Qoder Sites）
-<https://kaoyan-studio-5vf06em6cdh.qoder.zone> —— 发布的是 lite 内容，**不含 408 真题原卷 PDF，也不含 `pdf/` 里那 65 份 A4 试卷**，
-上传件 5.6 MB。访问模式 `public`（2026-10-07 应本人要求从 private 改的，未登录浏览器实测：
-408 2022 卷 47 题、数一 2015 卷 23 题 / 351 个公式节点零渲染失败、14 个资源零 4xx、约 140 KB、零脚本报错）。
+站点名 **彭瑞昊的考研备考台**，地址 <https://kaoyan-studio-5vf06em6cdh.qoder.zone> —— 发布的是 lite 内容，
+**不含 408 真题原卷 PDF，也不含 `pdf/` 里那 65 份 A4 试卷**，上传件 5.6 MB。访问模式 `public`（2026-10-07 应本人要求从 private 改的，未登录浏览器实测：
+408 2022 卷 47 题、数一 2015 卷 23 题 / 351 个公式节点零渲染失败、约 140 KB、零脚本报错）。
+唯一的 4xx 是浏览器自己发起来的 `/favicon.ico`（站点没挂图标，托管方回 404），页面资源本身全 200。
 重出部署目录：`python scripts/pack_share.py 1.3 --lite --dir site`（`site/` 已在 `.gitignore` 里），
 再走 Qoder Sites 的 prepare → publish；`site/index.html` 就是站点根，`no-papers.js` 让原卷入口自动降级。
 
