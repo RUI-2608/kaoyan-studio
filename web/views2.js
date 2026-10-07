@@ -15,7 +15,9 @@ route(/^p408$/, async (v) => {
   const none = idx.years.filter((y) => !y.n_answer);
   v.innerHTML = `
   <h1 class="page">408 计算机学科专业基础<small>2009-2025</small></h1>
-  <p class="sub">来源：${esc(idx.repo)}（MIT）。原卷与答案 PDF 已一并放进 <span class="kbd">papers/408/</span>，含图的题务必回原卷看。</p>
+  <p class="sub">来源：${esc(idx.repo)}（MIT）。${window.NO_PAPERS
+    ? '本包只有题目、答案与解析的文字版，不含原卷 PDF；含图的题（树、电路、拓扑）会标出来，需要对原卷请用全量包。'
+    : '原卷与答案 PDF 已一并放进 <span class="kbd">papers/408/</span>，含图的题务必回原卷看。'}</p>
   <div class="sect-h">答案齐全（${full.length} 年）</div><div class="grid">${full.map(tile).join('')}</div>
   <div class="sect-h">部分有答案（${part.length} 年）</div><div class="grid">${part.map(tile).join('')}</div>
   <div class="sect-h">只有原卷 PDF（${none.length} 年 · 答案卷是扫描件）</div><div class="grid">${none.map(tile).join('')}</div>
@@ -36,8 +38,10 @@ route(/^p408\/(\d{4})$/, async (v, [y]) => {
     <h1 class="page" style="margin:0">${doc.title}<small>${doc.audit.n} 题</small></h1>
     <span class="spacer"></span>
     <div class="modes" data-modes="${key}"><button data-mode="recite" class="${s.mode === 'recite' ? 'on' : ''}">背题</button><button data-mode="exam" class="${s.mode === 'exam' ? 'on' : ''}">考试</button></div>
-    <a class="btn sm" href="${esc(doc.sources.paper)}" target="_blank">原卷 PDF</a>
-    <a class="btn sm" href="${esc(doc.sources.answer)}" target="_blank">答案 PDF</a>
+    ${window.NO_PAPERS
+      ? `<span class="btn sm ghost" title="这个包里没有原卷 PDF，题目与解析照常">原卷未随本包</span>`
+      : `<a class="btn sm" href="${esc(doc.sources.paper)}" target="_blank">原卷 PDF</a>
+    <a class="btn sm" href="${esc(doc.sources.answer)}" target="_blank">答案 PDF</a>`}
     <button class="btn sm" data-act="print">打印</button>
   </div>
   ${timerHTML(key)}
@@ -52,7 +56,7 @@ route(/^p408\/(\d{4})$/, async (v, [y]) => {
     ${choice.map((q, i) => `<div data-subj="${esc(q.subject || '未归类')}">${qcard(q, i, 'p408', key)}</div>`).join('')}
     <div class="sect-h" style="color:#7a5f21;font-size:1em">二、综合应用题（${essay.length} 小题）</div>
     ${essay.map((q, i) => `<div data-subj="${esc(q.subject || '未归类')}">${qcard(q, i, 'essay', key)}</div>`).join('')}
-    <p class="note">卷面顺序就是真题原顺序（1–40 单选、41 起综合）。${doc.audit.n_with_figure || 0} 道题题干里出现「如图/电路/树形图」等字样，重排 PDF 的文字层不含图形 —— 这些题已标旗标，务必点开原卷 PDF 核对。</p>
+    <p class="note">卷面顺序就是真题原顺序（1–40 单选、41 起综合）。${doc.audit.n_with_figure || 0} 道题题干里出现「如图/电路/树形图」等字样，重排 PDF 的文字层不含图形 —— ${window.NO_PAPERS ? '这些题已标旗标，本包没有原卷可点，遇到读不通的图题以纸质真题为准。' : '这些题已标旗标，务必点开原卷 PDF 核对。'}</p>
   </div>`;
   paintScore(key, doc.questions, 'p408');
 });

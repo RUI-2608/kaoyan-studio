@@ -38,12 +38,32 @@ node scripts/serve.mjs            # http://127.0.0.1:8137/
 
 ### 5. 打一个给同学的包
 ```bash
-python scripts/pack_share.py 1.3        # -> dist/考研备考台-v1.3.zip（约 79 MB，含真题原卷）
+python scripts/pack_share.py 1.3          # 全量：dist/考研备考台-v1.3.zip（78.8 MB，含 408 真题原卷）
+python scripts/pack_share.py 1.3 --lite   # 轻量：dist/考研备考台-lite-v1.3.zip（21.8 MB，不含原卷）
 ```
 里面是 `考研备考台/{使用说明.txt, web/, pdf/}`，对方解压后双击 `web/index.html` 就能离线用，不需要装任何东西。
 **别用 PowerShell 的 `Compress-Archive`**：它把路径分隔符写成反斜杠，macOS / 安卓的解压工具会铺出一地碎文件，
 所以这里用 python 的 `zipfile` 显式写正斜杠，并给中文文件名置上 UTF-8 标记位（脚本末尾自带 CRC / 名字 / 分隔符三项自检）。
 给外人的缺口说明写在 `share/使用说明.txt`（改它再重打包）；`dist/` 已在 `.gitignore` 里。
+
+`--lite` 剔掉的是**运行时代码不读**的三类东西，共 182 个文件 / 62.1 MB：
+`web/papers/**`（34 份原卷与答案 PDF）、`web/data/**/*.md`（数学原文的 markdown 副本，站点读的是同名 `.js`）、
+`web/data/p408/*.txt`（构建时抽出来的文字层）。剔完往包里现造 `web/no-papers.js`（`window.NO_PAPERS = true`），
+并在副本 `index.html` 的 `app.js` 之前引它 —— 408 的「原卷 PDF / 答案 PDF」按钮会换成「原卷未随本包」，而不是点出一个 404。
+仓库里不放这个标记文件，只有 lite 包生成；两条路径的渲染结果都用无头浏览器以 `file://` 实测过。
+
+### 6. 体积与加载（实测，不是估的）
+| 位置 | 拉多少 |
+| --- | --- |
+| 首屏（12 个文件） | 437 KB；gzip 后 115 KB。其中 `katex.min.js` 269 KB 占 62% |
+| 408 列表 / 知识库 / 数据体检 | 0 KB 新增（索引已在首屏） |
+| 打开 408 2022 年卷 | +61.3 KB |
+| 打开数一 2015 年卷 | +31.6 KB |
+| 打开英语 2015 年卷 | +240.1 KB（全站最大的一块懒加载） |
+| 依次走完上面这些路由 | 累计 773.8 KB，0 报错 |
+
+每年数据是 `loadMod()` 注入 `<script>` 按需拉的，所以 `file://` 下打开某一卷只拉那一卷的 `.js`，
+78 MB 的目录不会一次性压到首屏上。
 
 ---
 
