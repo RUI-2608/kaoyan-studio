@@ -1,4 +1,4 @@
-/* 考研备考台 · 平板适用版（核心：数据装载 / 进度存储 / 公式与 markdown / 题目卡）
+/* 彭瑞昊的学习平台 · 平板适用版（核心：数据装载 / 进度存储 / 公式与 markdown / 题目卡）
  *
  * 数据用 .js（window.KY）而不是 fetch JSON —— 平板上直接双击 index.html（file://）也能跑；
  * 公式用本地 KaTeX，全程不联网。进度存 localStorage，可导出/导入 JSON。
@@ -136,10 +136,25 @@ function pullMath(text) {
   return { text: out, restore: (h) => h.replace(/\u0001(\d+)\u0002/g, (x, k) => bag[+k]) };
 }
 
+/* 数一原料里的配图写的是 img/<年>-<hash>.jpg —— 那是相对 data/math/ 的路径，
+   而页面基准是站点根，不补前缀就是一屏看不见的死图（2026-10-07 线上实测才暴露：
+   体检只查「文件在不在磁盘上」，查不出「URL 解不解得开」）。
+   补不出来的（数二那批 images/<hash>，原料就没下载进站）用 onerror 换成明写的缺图提示。 */
+function imgSrc(src) {
+  if (/^(https?:|data:|\/|#)/.test(src)) return src;
+  return src.startsWith('img/') ? 'data/math/' + src : src;
+}
+function imgDead(el) {
+  const s = document.createElement('span');
+  s.className = 'noimg';
+  s.textContent = '〔配图未随包：' + el.src.split('/').pop() + '〕';
+  el.replaceWith(s);
+}
+
 function inline(text) {
   let t = esc(text);
   t = t.replace(/\{\{(\d{1,2})\}\}/g, (m, n) => `<span class="blank" title="原文空缺处">${n}</span>`);
-  t = t.replace(/!\[([^\]]*)\]\(([^)\s]+)([^)]*)\)/g, (m, alt, src) => `<img src="${src}" alt="${alt}" loading="lazy">`);
+  t = t.replace(/!\[([^\]]*)\]\(([^)\s]+)([^)]*)\)/g, (m, alt, src) => `<img src="${imgSrc(src)}" alt="${alt}" loading="lazy" onerror="imgDead(this)">`);
   t = t.replace(/\[([^\]]+)\]\(([^)\s]+)([^)]*)\)/g, (m, tx, src) => `<a href="${src}" target="_blank" rel="noreferrer">${tx}</a>`);
   t = t.replace(/`([^`]+)`/g, (m, c) => `<code>${c}</code>`);
   t = t.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');

@@ -204,6 +204,8 @@ hr.rule { border: 0; border-top: 1px dashed rgba(120,100,60,.35); margin: 14px 0
 .md blockquote { margin: .6em 0; padding: 4px 12px; border-left: 3px solid var(--teal); background: rgba(61,130,150,.08); }
 .md strong { color: #1f1a0e; }
 .md img { max-width: 100%; }
+/* 解不开的配图不能留成空白 —— 明写成一句缺图提示 */
+.noimg { display: inline-block; margin: 6px 0; padding: 3px 9px; font-size: .82em; font-style: normal; color: #8a5a12; background: rgba(214,150,40,.12); border: 1px dashed rgba(180,120,30,.6); border-radius: 6px; }
 .cover { filter: blur(5px) saturate(.7); user-select: none; }
 .memorize .reveal-btn { margin-top: -60px; position: relative; z-index: 2; }
 

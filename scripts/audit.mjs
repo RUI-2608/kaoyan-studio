@@ -270,6 +270,30 @@ for (const row of mi.years.filter((r) => r.tier !== 'C')) {
 }
 ref.miss || good(`站点内引用的 ${ref.n} 个文件（PDF/配图）全部在位`);
 
+/* ---------- 6b. 配图的 URL 解不解得开 ----------
+   上一段只查「文件在不在磁盘上」，查不出基准路径错了：数一 57 张图全在，
+   正文写的却是相对 data/math/ 的 img/xxx，页面按站点根解析 → 线上整页空白死图
+   （2026-10-07 用真浏览器跑公开 URL 才暴露）。这里照 web/app.js 的 imgSrc() 同一套规则解一遍。 */
+const walkData = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => {
+  const p = path.join(d, e.name);
+  return e.isDirectory() ? walkData(p) : (/\.(js|md)$/.test(e.name) ? [p] : []);
+});
+let img = { n: 0, okN: 0, mathDead: [], otherDead: [] };
+for (const f of walkData(D)) {
+  const subj = path.relative(D, f).split(path.sep)[0];
+  for (const m of fs.readFileSync(f, 'utf8').matchAll(/!\[[^\]]*\]\(([^)\s]+)/g)) {
+    const src = m[1];
+    if (/^https?:/.test(src)) continue;
+    img.n++;
+    const rel = (subj === 'math' && src.startsWith('img/')) ? 'data/math/' + src : src;
+    if (fs.existsSync(path.join(ROOT, 'web', rel))) { img.okN++; continue; }
+    (subj === 'math' ? img.mathDead : img.otherDead).push(`${subj}/${path.basename(f)} → ${src}`);
+  }
+}
+if (img.mathDead.length) bad(`数一配图按站点根解不开 ${img.mathDead.length} 处，例如 ${img.mathDead.slice(0, 2).join('；')}`);
+img.otherDead.length && warn(`数二有 ${img.otherDead.length} 处配图原料就没下载进站（渲染时显示成「配图未随包」，不是点开的死链），例如 ${img.otherDead[0]}`);
+good(`正文配图引用 ${img.n} 处：解得开 ${img.okN} 处，数二缺原料 ${img.otherDead.length} 处（已明写）`);
+
 /* ---------- 汇总 ---------- */
 console.log('\n通过：'); ok.forEach((m) => console.log(' ✓', m));
 console.log('\n提醒（不算失败，但要在体检页露出）：'); warns.slice(0, 14).forEach((m) => console.log(' ·', m));

@@ -210,7 +210,7 @@ function exportData() {
   const blob = new Blob([JSON.stringify(S, null, 1)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `考研备考台-进度-${new Date().toISOString().slice(0, 10)}.json`;
+  a.download = `学习平台-进度-${new Date().toISOString().slice(0, 10)}.json`;
   a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   toast('进度已导出为 JSON 文件');
 }

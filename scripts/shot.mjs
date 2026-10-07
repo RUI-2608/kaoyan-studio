@@ -35,6 +35,8 @@ const SCENES = [
   { name: 'math2-list-1024', hash: '#/math2', size: [1024, 768] },
   { name: 'math2-paper-1024', hash: '#/math2/2015', size: [1024, 768], scroll: 520 },
   { name: 'math2-raw-1024', hash: '#/math2/1998', size: [1024, 768] },
+  /* 数二 2008 有 3 处配图原料没下载进站：必须看到「配图未随包」的明写，而不是空白 */
+  { name: 'math2-noimg-1024', hash: '#/math2/2008', size: [1024, 768], scroll: 700 },
   { name: 'math-paper-1024', hash: '#/math/2015', size: [1024, 768], scroll: 620 },
   { name: 'math-paper-opts', hash: '#/math/2015', size: [1024, 768], click: '.opt' },
   { name: 'math-exam-1024', hash: '#/math/2015', size: [1024, 768], clickText: '考试' },
