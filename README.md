@@ -65,6 +65,12 @@ python scripts/pack_share.py 1.3 --lite   # 轻量：dist/考研备考台-lite-v
 每年数据是 `loadMod()` 注入 `<script>` 按需拉的，所以 `file://` 下打开某一卷只拉那一卷的 `.js`，
 78 MB 的目录不会一次性压到首屏上。
 
+### 7. 线上版（Qoder Sites）
+<https://kaoyan-studio-5vf06em6cdh.qoder.zone> —— 发布的是 lite 内容，**不含 408 真题原卷 PDF，也不含 `pdf/` 里那 65 份 A4 试卷**，
+上传件 5.6 MB。当前访问模式 `private`：要用 Qoder 账号登录才能打开。
+重出部署目录：`python scripts/pack_share.py 1.3 --lite --dir site`（`site/` 已在 `.gitignore` 里），
+再走 Qoder Sites 的 prepare → publish；`site/index.html` 就是站点根，`no-papers.js` 让原卷入口自动降级。
+
 ---
 
 ## 二、里面到底有什么（截至本次构建）

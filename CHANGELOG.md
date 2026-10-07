@@ -5,6 +5,28 @@
 
 ---
 
+## v1.3.4 · 2026-10-07（上线：Qoder Sites 发布 lite 内容，访问仍限登录）
+
+### 发的是什么
+`python scripts/pack_share.py 1.3 --lite --dir site` 生成部署目录（给 pack_share 加了 `--dir`：
+只把 `web/` 摊到目录根上，`使用说明.txt` 和 `pdf/` 都不进 —— 站点代码不引用它们，
+上线没必要把 65 份 A4 真题试卷挂上网）。347 个文件 / 14.5 MB，上传件压缩后 5.6 MB。
+地址 <https://kaoyan-studio-5vf06em6cdh.qoder.zone>，`published: true`，release `01a115f2-346f…` 已提交为当前活动版本。
+
+### 部署前验过什么
+先在本机用 `node scripts/serve.mjs --port=8199 --dir=site` 以 HTTP 起了一遍（托管就是这个形态）：
+`index.html` 200、`no-papers.js` 200、`data/p408/2022.js` 200、`papers/408/2009-试卷.pdf` **404**（原卷确实没上去）；
+再无头 Edge 跑 6 个路由，`NO_PAPERS` 为真、题数照常（数一 23 / 408 47 / 英语 52）、零脚本报错。
+
+### 一件必须说清的现状
+站点访问模式是 `private`：我用未登录的浏览器打开，看到的是「登录后即可访问」的 Qoder 认证页，
+所以上线后的**真实渲染没能从公网侧验证**（本地 HTTP 那一轮算间接证据）。
+可选的三种受众：`private`（只有你）/ `selected`（最多 50 个指定 Qoder 用户）/ `public`（要确认）。
+`public` 会把真题文字与解析开放给任何人 —— 原卷 PDF 已经不在包里，但题库本身仍是第三方转录件，
+所以这一步等你明确说了再改。
+
+---
+
 ## v1.3.3 · 2026-10-07（先优化不上线：lite 包 21.8 MB，加载字节实测）
 
 ### 这轮的口径

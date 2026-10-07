@@ -5,3 +5,4 @@ _vendor/
 *.qoder.site
 .DS_Store
 dist/
+site/
