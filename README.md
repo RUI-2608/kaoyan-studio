@@ -1,15 +1,7 @@
 # 考研备考台（计算机 · 平板适用版）
 
-一套考研复习资料：数学（一）、数学（二）、408 计算机、英语（一/二）的**历年真题 + 答案 + 逐题解析**，
+一套给自己用的考研复习资料：数学（一）、数学（二）、408 计算机、英语（一/二）的**历年真题 + 答案 + 逐题解析**，
 外加按 408 大纲手写的**知识卡片手册**。可以在平板上离线用，也能导出 A4 的 PDF 拿进 GoodNotes 手写。
-
-> **版权与使用范围**
->
-> 真题原文版权归各命题机构；解析与题库的原出处见[「三、数据从哪来」](#三数据从哪来)，各来源仓库的许可以其仓库声明为准。
->
-> 本项目只做抓取、对齐、结构化与排版；知识卡片为本地手写，未复制任何第三方讲义原文。
->
-> **仅供个人学习备考，请勿商用或二次分发。** 若权利人认为本仓库内容侵犯其权益，请在 Issues 留言，我会第一时间删除对应内容。
 
 ---
 
@@ -142,25 +134,11 @@ python scripts/pack_share.py 1.3       # 打给同学的 zip（见「一、怎�
 
 每一轮改了什么、当时凭什么这么决定，记在 [`CHANGELOG.md`](CHANGELOG.md) —— 改版前先读它，别把踩过的坑再踩一遍。
 
-### 仓库与推送
+### 远程与推送（换机器时先看这段）
+私有仓库 `RUI-2608/kaoyan-studio`。`origin` 用的是 **`ssh://git@ssh.github.com:443/...`**，
+因为这机器到 github.com 的 22 端口是 Connection refused；认证用的是**仓库级 Deploy Key**（只开这一个库的写权限），
+不是账号级 SSH key。
 
-仓库地址：<https://github.com/RUI-2608/kaoyan-studio>（公开仓库，默认分支 `master`）。
-
-```bash
-git clone https://github.com/RUI-2608/kaoyan-studio.git
-cd kaoyan-studio && npm i      # 只依赖 katex
-```
-
-维护者这台机器推送走 `ssh://git@ssh.github.com:443/...`（本网络到 GitHub 的 22 端口不可达，443 端口可用）。
-
-换机器后，**推送前先确认远端地址没有被镜像改写**：
-
-```bash
-git remote -v
-git remote get-url --push origin     # 必须指向 github.com 本身
-```
-
-如果 `git remote get-url --push origin` 打出来是 `ghfast.top` 之类的第三方加速域名，
-说明本机全局配置里有一条 `url.<镜像>.insteadOf = https://github.com/`：
-此时走 HTTPS 推送会把凭据交给该镜像，请改用上面的 SSH 地址，或先清掉那条全局改写。
-
+还有一点要注意：这台机器的**全局 git 配置把 `https://github.com/` 改写成了 `https://ghfast.top/https://github.com/`**
+（第三方加速镜像），配套的 `pushInsteadOf` 实测对推送不生效 —— 直接 `git push` 走 HTTPS 会把凭据交给那个镜像。
+所以本仓库一律走上面的 SSH 地址；真要换回 HTTPS，先确认 `git remote get-url --push origin` 打出来的是 github.com 本身。
