@@ -58,6 +58,7 @@ h4 { font-size: 11pt; margin: 4mm 0 1.5mm; }
 .gap { border-bottom: 1px dotted #9a9aa5; height: 9mm; margin-top: 2mm; }
 .gap.tall { height: 34mm; }
 .flags { font-size: 8pt; color:#9a4b28; margin-top:1mm; }
+.noimg { display:inline-block; margin:1mm 0; padding:0.6mm 2mm; font-size:8.5pt; color:#8a5a12; background:#fbf3e3; border:0.3pt dashed #c8a55b; border-radius:1.5mm; }
 .answers { page-break-before: always; }
 .ans-line { font-size: 10pt; margin: 0 0 4mm; padding-bottom: 2mm; border-bottom: 1px solid #e6ddc8; }
 .ans-line b { color:#1d4f36; }
@@ -78,14 +79,27 @@ const EDGE = ['C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe
   'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
   'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe'].find((p) => fs.existsSync(p));
 const KATEX_CSS = path.join(ROOT, 'web/vendor/katex/katex.min.css').replace(/\\/g, '/');
+const WEB = path.join(ROOT, 'web').replace(/\\/g, '/');
 /* 科目名里有「（一 / 二）」这种带斜杠的写法，直接当文件名会跑出目录 */
 const safe = (s) => String(s).replace(/[\\/:*?"<>|]/g, '').replace(/\s+/g, ' ').trim();
 
 function page(title, body, lead) {
+  /* 三件事不做就是白块：
+     1) 这些 html 落在 .tmp/pdf/，而正文里的图写的是相对 web/ 的路径（imgSrc() 与站点同口径）
+        —— 给个 <base> 指到 web/，不然 PDF 里一张图都出不来；
+     2) PDF 是一次性打印，loading="lazy" 的图还没轮到加载就被印了；
+     3) 解不开的图在 PDF 里不能靠 onerror（打印页没引 app.js，imgDead 根本不存在），
+        构建时就换成「配图未随包」那句话 —— 数二那 69 处配图原料没下载，全靠这句兜底。 */
+  const b = String(body).replace(/ loading="lazy"/g, '').replace(/<img src="([^"]+)"[^>]*>/g, (m0, src) => {
+    if (/^https?:/.test(src)) return m0;
+    return fs.existsSync(path.join(ROOT, 'web', ...src.split('/'))) ? m0
+      : `<span class="noimg">〔配图未随包：${src.split('/').pop()}〕</span>`;
+  });
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8">
+<base href="file:///${WEB}/">
 <link rel="stylesheet" href="file:///${KATEX_CSS.replace(/^\//, '')}">
 <style>${CSS}</style><title>${esc(title)}</title></head><body>
-<h1>${esc(title)}${lead ? ` <small>${esc(lead)}</small>` : ''}</h1>${body}</body></html>`;
+<h1>${esc(title)}${lead ? ` <small>${esc(lead)}</small>` : ''}</h1>${b}</body></html>`;
 }
 
 function toPdf(htmlFile, pdfFile) {

@@ -1,5 +1,5 @@
 {
- "at": "2026-10-07T11:13:07.257Z",
+ "at": "2026-10-07T11:37:34.148Z",
  "ok": [
   "数学：缺答案的题都带旗标",
   "数学：每一年都带来源",
@@ -66,7 +66,9 @@
   "408 数据里有 113 处 U+FFFD：源答案 PDF 的数学符号转文字时丢了，恢复不出原字符，只影响个别解析里的符号（题干与选项不受影响）",
   "数二有 69 处配图原料就没下载进站（渲染时显示成「配图未随包」，不是点开的死链），例如 math2/1988.js → images/8529ee2fc49fc3b0e206f67e7d1499e4edf7fba29f759c3db4c38fe3fcf87e6f.jpg"
  ],
- "fails": [],
+ "fails": [
+  "index.html 引用了不存在的文件：data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%230d1226'/%3E%3Crect x='3.5' y='3.5' width='57' height='57' rx='10' fill='none' stroke='%23d9b04a' stroke-width='2'/%3E%3Ctext x='32' y='45' font-family='Georgia,serif' font-size='34' text-anchor='middle' fill='%23d9b04a'%3E%E5%BD%AD%3C/text%3E%3C/svg%3E"
+ ],
  "math": {
   "years": 21,
   "q": 480,

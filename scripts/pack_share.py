@@ -10,9 +10,9 @@ Windows 资源管理器认，但 macOS / 安卓的解压工具会在当前目录
 非 ASCII 文件名会正确置上 UTF-8 标记位（general purpose flag bit 11）。
 
 用法：
-    python scripts/pack_share.py 1.3                     # 全量包（含 408 原卷 PDF）
-    python scripts/pack_share.py 1.3 --lite              # 轻量包（不含原卷与运行时用不到的文件）
-    python scripts/pack_share.py 1.3 --lite --dir site    # 同样的内容落成 site/，给部署用
+    python scripts/pack_share.py 1.4                     # 全量包（含 408 原卷 PDF）
+    python scripts/pack_share.py 1.4 --lite              # 轻量包（不含原卷与运行时用不到的文件）
+    python scripts/pack_share.py 1.4 --lite --dir site    # 同样的内容落成 site/，给部署用
 
 lite 版剔除的都是**运行时代码不读**的东西：
     web/papers/**        34 份原卷与答案 PDF —— 60 MB，占全量包的 78%
@@ -25,7 +25,8 @@ lite 版剔除的都是**运行时代码不读**的东西：
 --dir 模式只出站点本体：把 web/ 的内容摊到目标目录根上（site/index.html 直接可访问），
 不带 使用说明.txt，也不带 pdf/（站点代码不引用它，上线没必要把 65 份 A4 真题试卷挂上去）。
 
-产物：dist/考研备考台-v<版本>.zip、dist/考研备考台-lite-v<版本>.zip，或 --dir 指定的目录
+产物：dist/彭瑞昊的学习平台-v<版本>.zip、dist/彭瑞昊的学习平台-lite-v<版本>.zip，或 --dir 指定的目录
+（2026-10-07 站点改名，包与解出来的顶层目录一起跟着改；v1.3 那两个旧包仍在 dist/ 里，别混着发）
 """
 import os
 import shutil
@@ -35,12 +36,12 @@ import zipfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ARGV = [a for a in sys.argv[1:]]
 LITE = "--lite" in ARGV
-VERSION = next((a for a in ARGV if not a.startswith("--")), "1.3")
+VERSION = next((a for a in ARGV if not a.startswith("--")), "1.4")
 DIR_ARG = next((ARGV[i + 1] for i, a in enumerate(ARGV) if a == "--dir" and i + 1 < len(ARGV)), None)
-TOP = "考研备考台"                                      # zip 解压出来的顶层文件夹名
+TOP = "彭瑞昊的学习平台"                                  # zip 解压出来的顶层文件夹名
 INCLUDE_DIRS = ["web", "pdf"]                           # 整目录进包
 INCLUDE_FILES = ["share/使用说明.txt"]                   # 放在解出来的顶层，别藏进 share/
-OUT = os.path.join(ROOT, "dist", "考研备考台%s-v%s.zip" % ("-lite" if LITE else "", VERSION))
+OUT = os.path.join(ROOT, "dist", "彭瑞昊的学习平台%s-v%s.zip" % ("-lite" if LITE else "", VERSION))
 EXTRA_DIR = os.path.join(ROOT, ".tmp", "lite-extra")     # lite 版现造的文件放这里
 MODE = "轻量版（不含原卷 PDF）" if LITE else "全量版"
 DROPPED = [0, 0.0]                                     # lite 剔掉的文件数与 MB，仅用于打印
@@ -81,6 +82,18 @@ def make_extras():
     return {"web/no-papers.js": flag, "web/index.html": idx}
 
 
+def share_note():
+    """把 使用说明.txt 里的 {{版本}} 换成实参再进包 —— 包名叫 v1.4、说明写着 v1.3 是会被同学看出来的。"""
+    txt = open(os.path.join(ROOT, "share", "使用说明.txt"), encoding="utf-8").read()
+    if "{{版本}}" not in txt:
+        sys.exit("share/使用说明.txt 里没有 {{版本}} 占位符，版本会跟包名脱节")
+    os.makedirs(EXTRA_DIR, exist_ok=True)
+    p = os.path.join(EXTRA_DIR, "使用说明.txt")
+    with open(p, "w", encoding="utf-8", newline="") as f:
+        f.write(txt.replace("{{版本}}", VERSION))
+    return p
+
+
 def build_plan():
     """返回 [(源文件, web/ 或仓库根的相对路径)]，说明文件在最前。"""
     files = []
@@ -108,7 +121,7 @@ def build_plan():
         p = os.path.join(ROOT, f)
         if not os.path.isfile(p):
             sys.exit("缺少文件：%s" % f)
-        plan.insert(0, (p, os.path.basename(f)))
+        plan.insert(0, (share_note(), os.path.basename(f)))
     return plan
 
 

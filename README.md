@@ -1,4 +1,6 @@
-# 考研备考台（计算机 · 平板适用版）
+# 彭瑞昊的学习平台（考研 · 计算机 · 平板适用版）
+
+原名「考研备考台」，2026-10-07 改的名：云端站点项目名、页面 `<title>`、页头名牌、分发包顶层目录、`pdf/` 一起跟上。
 
 一套给自己用的考研复习资料：数学（一）、数学（二）、408 计算机、英语（一/二）的**历年真题 + 答案 + 逐题解析**，
 外加按 408 大纲手写的**知识卡片手册**。可以在平板上离线用，也能导出 A4 的 PDF 拿进 GoodNotes 手写。
@@ -38,10 +40,11 @@ node scripts/serve.mjs            # http://127.0.0.1:8137/
 
 ### 5. 打一个给同学的包
 ```bash
-python scripts/pack_share.py 1.3          # 全量：dist/考研备考台-v1.3.zip（78.8 MB，含 408 真题原卷）
-python scripts/pack_share.py 1.3 --lite   # 轻量：dist/考研备考台-lite-v1.3.zip（21.8 MB，不含原卷）
+python scripts/pack_share.py 1.4          # 全量：dist/彭瑞昊的学习平台-v1.4.zip（含 408 真题原卷）
+python scripts/pack_share.py 1.4 --lite   # 轻量：dist/彭瑞昊的学习平台-lite-v1.4.zip（不含原卷）
 ```
-里面是 `考研备考台/{使用说明.txt, web/, pdf/}`，对方解压后双击 `web/index.html` 就能离线用，不需要装任何东西。
+里面是 `彭瑞昊的学习平台/{使用说明.txt, web/, pdf/}`，对方解压后双击 `web/index.html` 就能离线用，不需要装任何东西。
+`使用说明.txt` 里的版本号写的是 `{{版本}}` 占位符，打包时换成实参 —— 不然包名 v1.4、说明还印着 v1.3。
 **别用 PowerShell 的 `Compress-Archive`**：它把路径分隔符写成反斜杠，macOS / 安卓的解压工具会铺出一地碎文件，
 所以这里用 python 的 `zipfile` 显式写正斜杠，并给中文文件名置上 UTF-8 标记位（脚本末尾自带 CRC / 名字 / 分隔符三项自检）。
 给外人的缺口说明写在 `share/使用说明.txt`（改它再重打包）；`dist/` 已在 `.gitignore` 里。
@@ -67,7 +70,7 @@ python scripts/pack_share.py 1.3 --lite   # 轻量：dist/考研备考台-lite-v
 
 ### 7. 线上版（Qoder Sites）
 站点名 **彭瑞昊的学习平台**（2026-10-07 从「考研备考台」改过来：云端项目名、`<title>`、页头名牌三处一起改才算数；
-分发包那套还叫 `考研备考台/`，改它得重打 79 MB 并换校验哈希），地址 <https://kaoyan-studio-5vf06em6cdh.qoder.zone> —— 发布的是 lite 内容，
+分发包与 `pdf/` 也在 v1.4 一起跟着改了名字并重出，见 §5），地址 <https://kaoyan-studio-5vf06em6cdh.qoder.zone> —— 发布的是 lite 内容，
 **不含 408 真题原卷 PDF，也不含 `pdf/` 里那 65 份 A4 试卷**，上传件 5.6 MB。访问模式 `public`（2026-10-07 应本人要求从 private 改的，未登录浏览器实测：
 408 2022 卷 47 题、数一 2015 卷 23 题 / 351 个公式节点零渲染失败、约 140 KB、零脚本报错）。
 浏览器每次开页发的 `/favicon.ico` 已经用内联 SVG 名牌堵掉，线上零 4xx。
