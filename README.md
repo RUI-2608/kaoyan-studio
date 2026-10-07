@@ -121,3 +121,12 @@ node scripts/build-pdf.mjs all         # A4 PDF 套件
 截图：`.shots/`（24 个场景，含数二列表/试卷/原文、408 卷面顺序与来源旗标、408 体检表、体检页）。
 
 每一轮改了什么、当时凭什么这么决定，记在 [`CHANGELOG.md`](CHANGELOG.md) —— 改版前先读它，别把踩过的坑再踩一遍。
+
+### 远程与推送（换机器时先看这段）
+私有仓库 `RUI-2608/kaoyan-studio`。`origin` 用的是 **`ssh://git@ssh.github.com:443/...`**，
+因为这机器到 github.com 的 22 端口是 Connection refused；认证用的是**仓库级 Deploy Key**（只开这一个库的写权限），
+不是账号级 SSH key。
+
+还有一点要注意：这台机器的**全局 git 配置把 `https://github.com/` 改写成了 `https://ghfast.top/https://github.com/`**
+（第三方加速镜像），配套的 `pushInsteadOf` 实测对推送不生效 —— 直接 `git push` 走 HTTPS 会把凭据交给那个镜像。
+所以本仓库一律走上面的 SSH 地址；真要换回 HTTPS，先确认 `git remote get-url --push origin` 打出来的是 github.com 本身。
