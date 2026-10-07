@@ -67,7 +67,8 @@ python scripts/pack_share.py 1.3 --lite   # 轻量：dist/考研备考台-lite-v
 
 ### 7. 线上版（Qoder Sites）
 <https://kaoyan-studio-5vf06em6cdh.qoder.zone> —— 发布的是 lite 内容，**不含 408 真题原卷 PDF，也不含 `pdf/` 里那 65 份 A4 试卷**，
-上传件 5.6 MB。当前访问模式 `private`：要用 Qoder 账号登录才能打开。
+上传件 5.6 MB。访问模式 `public`（2026-10-07 应本人要求从 private 改的，未登录浏览器实测：
+408 2022 卷 47 题、数一 2015 卷 23 题 / 351 个公式节点零渲染失败、14 个资源零 4xx、约 140 KB、零脚本报错）。
 重出部署目录：`python scripts/pack_share.py 1.3 --lite --dir site`（`site/` 已在 `.gitignore` 里），
 再走 Qoder Sites 的 prepare → publish；`site/index.html` 就是站点根，`no-papers.js` 让原卷入口自动降级。
 
@@ -161,7 +162,8 @@ python scripts/pack_share.py 1.3       # 打给同学的 zip（见「一、怎�
 每一轮改了什么、当时凭什么这么决定，记在 [`CHANGELOG.md`](CHANGELOG.md) —— 改版前先读它，别把踩过的坑再踩一遍。
 
 ### 远程与推送（换机器时先看这段）
-私有仓库 `RUI-2608/kaoyan-studio`。`origin` 用的是 **`ssh://git@ssh.github.com:443/...`**，
+仓库 `RUI-2608/kaoyan-studio`（**目前是公开的**：真题原卷与 A4 试卷都在版本库里，公开即任何人都能逐份下载，
+要收回得去 `Settings → Danger Zone → Change repository visibility`）。`origin` 用的是 **`ssh://git@ssh.github.com:443/...`**，
 因为这机器到 github.com 的 22 端口是 Connection refused；认证用的是**仓库级 Deploy Key**（只开这一个库的写权限），
 不是账号级 SSH key。
 
